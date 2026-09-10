@@ -3,11 +3,24 @@ from flask_login import login_required, current_user
 from services.analysis_service import AnalysisService
 from services.reddit_service import RedditService
 from services.job_service import JobService
+from services.v12_context_service import build_v12_context
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/analysis')
 analysis_service = AnalysisService()
 reddit_service = RedditService()
 job_service = JobService()
+
+
+def _build_v12_result_context(analysis_id, user_id, narrative_limit=5,
+                              temporal_limit=5):
+    """Bounded read-only V12 context for the analysis result page.
+
+    Delegates to the shared context builder so the result page and every
+    export format consume the exact same data contract.
+    """
+    return build_v12_context(analysis_id, user_id,
+                             narrative_limit=narrative_limit,
+                             temporal_limit=temporal_limit)
 
 
 @analysis_bp.route('/new', methods=['GET', 'POST'])
@@ -61,7 +74,8 @@ def result(analysis_id):
         flash('Analysis not found.', 'danger')
         return redirect(url_for('dashboard.index'))
 
-    return render_template('analysis/result.html', data=data)
+    v12 = _build_v12_result_context(analysis_id, current_user.id)
+    return render_template('analysis/result.html', data=data, v12=v12)
 
 
 @analysis_bp.route('/history')

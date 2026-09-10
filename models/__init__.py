@@ -19,3 +19,9 @@ from models.entity_context import EntityContext
 from models.channel_context import ChannelContext
 from models.video_context_history import VideoContextHistory
 from models.entity_history import EntityHistory
+from models.media_analysis import MediaAnalysis
+from models.narrative import Narrative
+from models.narrative_occurrence import NarrativeOccurrence
+from models.coordination_signal import CoordinationSignal
+from models.propagation_event import PropagationEvent
+from models.threat_assessment import ThreatAssessment

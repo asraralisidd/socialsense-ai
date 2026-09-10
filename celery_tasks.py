@@ -52,58 +52,68 @@ def run_analysis(self, job_id):
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 25, 'Fetching Content')
+            job_repo.update_progress(job_id, 20, 'Fetching Content')
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 40, 'Fetching Comments')
+            job_repo.update_progress(job_id, 30, 'Fetching Comments')
             log_repo.create_log(job_id, 'INFO', f'Fetching up to {job.comment_limit} comments.', 'Fetching')
 
             _check_cancelled(job_id, job_repo)
 
-            self.update_state(state='PROGRESS', meta={'step': 'AI Analysis', 'percent': 60})
-            job_repo.update_progress(job_id, 60, 'Running AI Analysis')
+            self.update_state(state='PROGRESS', meta={'step': 'AI Analysis', 'percent': 40})
+            job_repo.update_progress(job_id, 40, 'Running AI Analysis')
             log_repo.create_log(job_id, 'INFO', 'AI analysis engines running.', 'Analysis')
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 75, 'Generating Summary')
+            job_repo.update_progress(job_id, 50, 'Generating Summary')
             log_repo.create_log(job_id, 'INFO', 'Generating analysis summary.', 'Summary')
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 80, 'Processing Transcript')
+            job_repo.update_progress(job_id, 55, 'Processing Transcript')
             if job.platform == 'youtube':
                 log_repo.create_log(job_id, 'INFO', 'Fetching and analyzing video transcript.', 'Transcript')
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 87, 'Extracting Entities')
+            job_repo.update_progress(job_id, 60, 'Extracting Entities')
             log_repo.create_log(job_id, 'INFO', 'Extracting and analyzing entities.', 'Entity')
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 90, 'Analyzing Entity Context')
+            job_repo.update_progress(job_id, 65, 'Analyzing Entity Context')
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 93, 'Loading Channel History')
+            job_repo.update_progress(job_id, 70, 'Loading Channel History')
             log_repo.create_log(job_id, 'INFO', 'Loading channel context and video history.', 'Channel')
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 95, 'Computing Historical Trends')
+            job_repo.update_progress(job_id, 75, 'Computing Historical Trends')
             log_repo.create_log(job_id, 'INFO', 'Computing historical entity and topic trends.', 'Trends')
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 97, 'Generating Context Intelligence')
+            job_repo.update_progress(job_id, 78, 'Generating Context Intelligence')
+
+            def _progress(pct, step):
+                try:
+                    job_repo.update_progress(job_id, pct, step)
+                    log_repo.create_log(job_id, 'INFO', step, 'Intelligence')
+                except Exception:
+                    db.session.rollback()
+                    logger.warning(f'Progress update failed for job {job_id}')
 
             if job.platform == 'youtube':
                 result = analysis_service.create_youtube_analysis(
-                    job.user_id, job.source_input, comment_limit=job.comment_limit
+                    job.user_id, job.source_input, comment_limit=job.comment_limit,
+                    progress_callback=_progress,
                 )
             elif job.platform == 'reddit':
                 result = analysis_service.create_reddit_analysis(
-                    job.user_id, job.source_input, comment_limit=job.comment_limit
+                    job.user_id, job.source_input, comment_limit=job.comment_limit,
+                    progress_callback=_progress,
                 )
             else:
                 job_repo.mark_failed(job_id, f'Unknown platform: {job.platform}')
@@ -117,7 +127,7 @@ def run_analysis(self, job_id):
 
             _check_cancelled(job_id, job_repo)
 
-            job_repo.update_progress(job_id, 98, 'Generating Exports')
+            job_repo.update_progress(job_id, 99, 'Saving Results')
             log_repo.create_log(job_id, 'INFO', f'Analysis complete. {result["comment_count"]} comments processed.', 'Complete')
 
             job_repo.mark_completed(job_id, analysis_id=result['analysis_id'])

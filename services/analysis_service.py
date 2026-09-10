@@ -37,6 +37,13 @@ from services.channel_context_service import ChannelContextService
 from services.video_history_service import VideoHistoryService
 from services.entity_history_service import EntityHistoryService
 from services.context_intelligence_service import ContextIntelligenceService
+from services.authenticity_service import AuthenticityService
+from models.media_analysis import MediaAnalysis
+from services.narrative_intelligence_service import NarrativeIntelligenceService
+from services.coordination_intelligence_service import CoordinationIntelligenceService
+from services.propagation_intelligence_service import PropagationIntelligenceService
+from services.temporal_intelligence_service import TemporalIntelligenceService
+from services.threat_assessment_service import ThreatAssessmentService
 
 
 class AnalysisService:
@@ -62,8 +69,14 @@ class AnalysisService:
         self.video_history = VideoHistoryService()
         self.entity_history = EntityHistoryService()
         self.context_intelligence = ContextIntelligenceService()
+        self.authenticity_service = AuthenticityService()
+        self.narrative_service = NarrativeIntelligenceService()
+        self.coordination_service = CoordinationIntelligenceService()
+        self.propagation_service = PropagationIntelligenceService()
+        self.temporal_service = TemporalIntelligenceService()
+        self.threat_service = ThreatAssessmentService()
 
-    def create_youtube_analysis(self, user_id, video_url, comment_limit=100):
+    def create_youtube_analysis(self, user_id, video_url, comment_limit=100, progress_callback=None):
         video_id = self.youtube_service.extract_video_id(video_url)
         if not video_id:
             return {'success': False, 'error': 'Invalid YouTube URL or Video ID.'}
@@ -168,6 +181,7 @@ class AnalysisService:
                     transcript_obj.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                     db.session.commit()
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.warning(f'Transcript processing failed: {e}')
 
         entities = []
@@ -260,6 +274,7 @@ class AnalysisService:
                 entity_summary_data = self.entity_summary.generate_summary(entities, entity_sentiments, entity_risks)
 
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.warning(f'Entity intelligence failed: {e}')
 
         if current_app.config.get('ENABLE_CHANNEL_INTELLIGENCE', True):
@@ -304,7 +319,77 @@ class AnalysisService:
                     current_risk=avg_r,
                 )
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.warning(f'Channel intelligence failed: {e}')
+
+        v12_components = {}
+
+        self._notify_progress(progress_callback, 82, 'Running Authenticity Engine')
+        if current_app.config.get('ENABLE_AUTHENTICITY_ENGINE', True):
+            try:
+                transcript_text = transcript_obj.transcript_text if transcript_obj and transcript_obj.is_available else None
+                v12_components['authenticity'] = self.authenticity_service.analyze(
+                    analysis,
+                    video_info=video_info,
+                    transcript_text=transcript_text,
+                    thumbnail_url=None,
+                    demo_mode=is_demo,
+                    key=video_id,
+                )
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Authenticity intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 85, 'V12 Narrative Intelligence')
+        if current_app.config.get('ENABLE_NARRATIVE_INTELLIGENCE', True):
+            try:
+                narrative_transcript = transcript_obj.transcript_text if transcript_obj and transcript_obj.is_available else None
+                v12_components['narrative'] = self.narrative_service.analyze(
+                    analysis,
+                    video_info=video_info,
+                    transcript_text=narrative_transcript,
+                    entities=entities or None,
+                    comments=comment_results_list or None,
+                )
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Narrative intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 88, 'V12 Coordination Detection')
+        if current_app.config.get('ENABLE_COORDINATION_DETECTION', True):
+            try:
+                v12_components['coordination'] = self.coordination_service.analyze(
+                    analysis,
+                    comments=comment_results_list or None,
+                    entities=entities or None,
+                )
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Coordination intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 91, 'V12 Cross-Platform Linking')
+        if current_app.config.get('ENABLE_PROPAGATION_INTELLIGENCE', True):
+            try:
+                v12_components['propagation'] = self.propagation_service.analyze(analysis)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Propagation intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 94, 'V12 Temporal Intelligence')
+        if current_app.config.get('ENABLE_TEMPORAL_INTELLIGENCE', True):
+            try:
+                v12_components['temporal'] = self.temporal_service.analyze(analysis)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Temporal intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 97, 'V12 Threat Assessment')
+        if current_app.config.get('ENABLE_THREAT_ASSESSMENT', True):
+            try:
+                self.threat_service.analyze(analysis, components=v12_components)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Threat assessment failed: {e}')
 
         return {
             'success': True,
@@ -314,7 +399,7 @@ class AnalysisService:
             'transcript_available': bool(transcript_obj and transcript_obj.is_available),
         }
 
-    def create_reddit_analysis(self, user_id, post_id, subreddit=None, input_type='post', comment_limit=100):
+    def create_reddit_analysis(self, user_id, post_id, subreddit=None, input_type='post', comment_limit=100, progress_callback=None):
         has_creds = bool(current_app.config.get('REDDIT_CLIENT_ID', '') and current_app.config.get('REDDIT_CLIENT_SECRET', ''))
         is_demo = not has_creds
 
@@ -437,6 +522,7 @@ class AnalysisService:
                     db.session.commit()
                 entity_summary_data = self.entity_summary.generate_summary(entities, entity_sentiments, entity_risks)
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.warning(f'Entity intelligence failed: {e}')
 
         if current_app.config.get('ENABLE_CHANNEL_INTELLIGENCE', True):
@@ -449,12 +535,13 @@ class AnalysisService:
                 entity_names = [e.normalized_name for e in entities]
                 entity_count = len(entities)
                 avg_sent = analysis.average_sentiment or 50.0
+                avg_r = analysis.average_risk if hasattr(analysis, 'average_risk') and analysis.average_risk else 0.0
 
                 if current_app.config.get('ENABLE_HISTORICAL_CONTEXT', True):
                     self.video_history.record_video_analysis(
                         analysis.id, user_id, post_info.get('post_id', ''),
                         channel_id, post_info.get('title', ''), entity_count,
-                        avg_sent, analysis.average_risk or 0.0,
+                        avg_sent, avg_r,
                         top_entities=entity_names[:10],
                     )
 
@@ -474,7 +561,75 @@ class AnalysisService:
 
                     self.channel_service.update_channel_stats(user_id, channel_id)
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.warning(f'Channel intelligence failed: {e}')
+
+        v12_components = {}
+
+        self._notify_progress(progress_callback, 82, 'Running Authenticity Engine')
+        if current_app.config.get('ENABLE_AUTHENTICITY_ENGINE', True):
+            try:
+                v12_components['authenticity'] = self.authenticity_service.analyze(
+                    analysis,
+                    video_info=post_info,
+                    transcript_text=post_info.get('body', ''),
+                    thumbnail_url=None,
+                    demo_mode=is_demo,
+                    key=post_info.get('post_id', ''),
+                )
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Authenticity intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 85, 'V12 Narrative Intelligence')
+        if current_app.config.get('ENABLE_NARRATIVE_INTELLIGENCE', True):
+            try:
+                v12_components['narrative'] = self.narrative_service.analyze(
+                    analysis,
+                    video_info=post_info,
+                    transcript_text=None,
+                    entities=entities or None,
+                    comments=comment_results_list or None,
+                )
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Narrative intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 88, 'V12 Coordination Detection')
+        if current_app.config.get('ENABLE_COORDINATION_DETECTION', True):
+            try:
+                v12_components['coordination'] = self.coordination_service.analyze(
+                    analysis,
+                    comments=comment_results_list or None,
+                    entities=entities or None,
+                )
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Coordination intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 91, 'V12 Cross-Platform Linking')
+        if current_app.config.get('ENABLE_PROPAGATION_INTELLIGENCE', True):
+            try:
+                v12_components['propagation'] = self.propagation_service.analyze(analysis)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Propagation intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 94, 'V12 Temporal Intelligence')
+        if current_app.config.get('ENABLE_TEMPORAL_INTELLIGENCE', True):
+            try:
+                v12_components['temporal'] = self.temporal_service.analyze(analysis)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Temporal intelligence failed: {e}')
+
+        self._notify_progress(progress_callback, 97, 'V12 Threat Assessment')
+        if current_app.config.get('ENABLE_THREAT_ASSESSMENT', True):
+            try:
+                self.threat_service.analyze(analysis, components=v12_components)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'Threat assessment failed: {e}')
 
         return {
             'success': True,
@@ -483,6 +638,20 @@ class AnalysisService:
             'comment_count': len(comments),
             'entity_count': len(entities),
         }
+
+    def _notify_progress(self, callback, percent, step):
+        """Safely invoke an optional progress callback.
+
+        A broken callback (e.g., database connection issue) must never fail the
+        analysis.  The callback is wrapped in a try/except that logs the error
+        and continues.
+        """
+        if callback is None:
+            return
+        try:
+            callback(percent, step)
+        except Exception:
+            current_app.logger.warning('Progress callback failed (non-fatal).')
 
     def _analyze_and_store_comment_v2(self, analysis_id, comment, all_texts):
         text = comment['text']
@@ -724,6 +893,7 @@ class AnalysisService:
                     channel_data = channel_obj
                     context_intelligence = context_intel
                 except Exception as e:
+                    db.session.rollback()
                     current_app.logger.warning(f'Context intelligence lookup failed: {e}')
 
         result = {
@@ -741,6 +911,7 @@ class AnalysisService:
             'entity_summary': entity_summary_data_list if youtube or (reddit and analysis.analysis_type == 'reddit') else {},
             'context_intelligence': context_intelligence,
             'channel_data': channel_data,
+            'media_analysis': self.authenticity_service.get_media_analysis(analysis_id),
         }
 
         entity_objects = Entity.query.filter_by(analysis_id=analysis_id).order_by(Entity.importance_score.desc()).limit(20).all()
@@ -834,6 +1005,26 @@ class AnalysisService:
         if avg_all_risk > 75:
             community_health = 'Critical'
 
+        ai_videos = 0
+        authentic_videos = 0
+        deepfake_count = 0
+        voice_clone_count = 0
+        authenticity_total = 0.0
+        authenticity_count = 0
+        for analysis in analyses:
+            ma = analysis.media_analysis
+            if ma:
+                authenticity_total += ma.overall_authenticity_score or 0.0
+                authenticity_count += 1
+                if (ma.overall_ai_probability or 0.0) >= 60.0:
+                    ai_videos += 1
+                elif (ma.overall_authenticity_score or 0.0) >= 60.0:
+                    authentic_videos += 1
+                if (ma.deepfake_score or 0.0) >= 60.0:
+                    deepfake_count += 1
+                if (ma.synthetic_voice_score or 0.0) >= 60.0:
+                    voice_clone_count += 1
+
         return {
             'total_analyses': total_analyses,
             'total_comments': total_comments,
@@ -854,6 +1045,13 @@ class AnalysisService:
             'entity_risk_high': entity_risk_high,
             'entity_risk_critical': entity_risk_critical,
             'total_videos_analyzed': VideoContextHistory.query.filter_by(user_id=user_id).count(),
+            'ai_videos': ai_videos,
+            'authentic_videos': authentic_videos,
+            'deepfake_count': deepfake_count,
+            'voice_clone_count': voice_clone_count,
+            'avg_authenticity': round(authenticity_total / max(authenticity_count, 1), 1),
+            'authenticity_count': authenticity_count,
+            'entity_risk_count': entity_risk_count,
         }
 
     def get_all_user_analyses_with_data(self, user_id, limit=None):

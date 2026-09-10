@@ -42,7 +42,8 @@ class EntityHistoryService:
             func.avg(EntityHistory.sentiment_score).label('avg_sentiment'),
             func.avg(EntityHistory.risk_score).label('avg_risk'),
         ).filter_by(channel_id=channel_id, user_id=user_id).group_by(
-            EntityHistory.normalized_name
+            EntityHistory.normalized_name,
+            EntityHistory.entity_type,
         ).order_by(func.count(EntityHistory.id).desc()).all()
 
         return [
@@ -78,7 +79,8 @@ class EntityHistoryService:
             func.avg(EntityHistory.sentiment_score).label('avg_sentiment'),
             func.avg(EntityHistory.risk_score).label('avg_risk'),
         ).filter_by(channel_id=channel_id, user_id=user_id).group_by(
-            EntityHistory.normalized_name
+            EntityHistory.normalized_name,
+            EntityHistory.entity_type,
         ).order_by(func.count(EntityHistory.id).desc()).limit(limit).all()
 
         return [

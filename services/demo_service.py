@@ -249,3 +249,8 @@ class DemoService:
             'channel_avg_risk': 20.0,
             'channel_avg_entity_count': 6.0,
         }
+
+    def get_demo_authenticity(self):
+        """Return demo authenticity scenarios. Clearly labeled simulated."""
+        from services.authenticity_service import AuthenticityService
+        return AuthenticityService().get_demo_authenticity()

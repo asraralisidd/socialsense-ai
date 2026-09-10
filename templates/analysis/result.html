@@ -34,6 +34,18 @@
                class="btn btn-info">
                 <i class="fas fa-file-code me-1"></i>JSON
             </a>
+            <a href="{{ url_for('export.xlsx_download', analysis_id=data.analysis.id) }}"
+               class="btn btn-success">
+                <i class="fas fa-file-excel me-1"></i>XLSX
+            </a>
+            <a href="{{ url_for('export.pdf_download', analysis_id=data.analysis.id) }}"
+               class="btn btn-danger">
+                <i class="fas fa-file-pdf me-1"></i>PDF
+            </a>
+            <a href="{{ url_for('export.docx_download', analysis_id=data.analysis.id) }}"
+               class="btn btn-primary">
+                <i class="fas fa-file-word me-1"></i>DOCX
+            </a>
         </div>
     </div>
 </div>
@@ -359,6 +371,455 @@
             {% endfor %}
         </div>
         {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if v12 and v12.threat %}
+<div class="card border-danger border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-triangle-exclamation me-2 text-danger"></i>Threat Assessment</h6>
+        <span class="badge bg-secondary">heuristic weighted assessment</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Overall Threat Score</small>
+                    <span class="fw-bold fs-4 text-danger">{{ v12.threat.overall_threat_score }}</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Threat Level</small>
+                    <span class="fw-bold fs-5 text-{{ 'danger' if v12.threat.threat_level in ('High', 'Elevated') else 'warning' if v12.threat.threat_level == 'Moderate' else 'success' }}">
+                        {{ v12.threat.threat_level }}
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Confidence</small>
+                    <span class="fw-bold fs-4 text-info">{{ v12.threat.confidence }}%</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Evidence Coverage</small>
+                    <span class="fw-bold fs-4 text-warning">{{ (v12.threat.evidence_coverage * 100)|round|int }}%</span>
+                </div>
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            {% set comps = [('authenticity', 'Authenticity'), ('coordination', 'Coordination'),
+                            ('narrative', 'Narrative Risk'), ('propagation', 'Propagation'),
+                            ('temporal', 'Temporal'), ('entity', 'Entity Risk')] %}
+            {% for key, label in comps %}
+            <div class="col-6 col-md-2">
+                <div class="p-2 bg-dark rounded text-center">
+                    <small class="text-muted d-block">{{ label }}</small>
+                    {% if v12.threat.component_scores.get(key) is not none %}
+                    <span class="fw-bold text-warning">{{ v12.threat.component_scores.get(key) }}</span>
+                    {% else %}
+                    <span class="fw-bold text-muted"><em>Unavailable</em></span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if v12.threat.capability_labels %}
+        <div class="mb-2">
+            <small class="text-muted">Component Capability: </small>
+            {% for key, label in comps %}
+            <span class="badge bg-secondary me-1">{{ label }}: {{ v12.threat.capability_labels.get(key, 'n/a') }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if v12.threat.summary %}
+        <p class="small mb-2">{{ v12.threat.summary }}</p>
+        {% endif %}
+        {% if v12.threat.reasons %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <h6 class="small text-muted mb-2"><i class="fas fa-list-check me-1"></i>Reasons</h6>
+            <ul class="small mb-0 ps-3">
+                {% for reason in v12.threat.reasons[:12] %}
+                <li>{{ reason }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% if v12.threat.limitations %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <h6 class="small text-muted mb-2"><i class="fas fa-circle-info me-1"></i>Limitations</h6>
+            <ul class="small mb-0 ps-3">
+                {% for limitation in v12.threat.limitations[:8] %}
+                <li>{{ limitation }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            This is a heuristic, non-causal assessment combining available component signals.
+            It indicates relative risk based on observed indicators and is not a definitive
+            classification or proof of intent, authorship, or coordination.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if data.media_analysis %}
+<div class="card border-warning border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-shield-halved me-2 text-warning"></i>Authenticity Intelligence</h6>
+        <span class="badge bg-secondary">heuristic assessment</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">AI Probability</small>
+                    <span class="fw-bold fs-4 text-danger">{{ data.media_analysis.overall_ai_probability }}%</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Authenticity Score</small>
+                    <span class="fw-bold fs-4 text-success">{{ data.media_analysis.overall_authenticity_score }}</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Confidence</small>
+                    <span class="fw-bold fs-4 text-info">{{ data.media_analysis.confidence }}%</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-dark rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Summary</small>
+                    <span class="small">{{ data.media_analysis.summary or 'N/A' }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-2">
+                <div class="p-2 bg-dark rounded text-center">
+                    <small class="text-muted d-block">Deepfake</small>
+                    <span class="fw-bold text-warning">{{ data.media_analysis.deepfake_score }}</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="p-2 bg-dark rounded text-center">
+                    <small class="text-muted d-block">Synthetic Voice</small>
+                    <span class="fw-bold text-warning">{{ data.media_analysis.synthetic_voice_score }}</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="p-2 bg-dark rounded text-center">
+                    <small class="text-muted d-block">Thumbnail</small>
+                    <span class="fw-bold text-warning">{{ data.media_analysis.thumbnail_ai_score }}</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="p-2 bg-dark rounded text-center">
+                    <small class="text-muted d-block">Frame Manipulation</small>
+                    <span class="fw-bold text-warning">{{ data.media_analysis.frame_manipulation_score }}</span>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="p-2 bg-dark rounded text-center">
+                    <small class="text-muted d-block">Metadata</small>
+                    <span class="fw-bold text-warning">{{ data.media_analysis.metadata_score }}</span>
+                </div>
+            </div>
+        </div>
+        {% if data.media_analysis.indicators %}
+        <div class="mb-2">
+            <small class="text-muted">Indicators: </small>
+            {% for indicator in data.media_analysis.indicators[:10] %}
+            <span class="badge bg-warning text-dark me-1">{{ indicator }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if data.media_analysis.reasons %}
+        <div class="bg-dark rounded p-3">
+            <h6 class="small text-muted mb-2"><i class="fas fa-list-check me-1"></i>Explainable Reasons</h6>
+            <ul class="small mb-0 ps-3">
+                {% for reason in data.media_analysis.reasons[:12] %}
+                <li>{{ reason }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            This is a heuristic, explainable assessment based on available signals. It indicates
+            possible AI-generated content but does not constitute proof of synthetic media.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v12 and (v12.narratives or v12.coordination or v12.propagation or v12.temporal) %}
+<div class="alert alert-secondary">
+    <i class="fas fa-info-circle me-2"></i>
+    The following V12 intelligence sections are heuristic and non-causal. They describe
+    observed patterns in comments and platform activity and do not prove intent,
+    authorship, conspiracy, or actual causal propagation.
+</div>
+{% endif %}
+
+{% if v12 and v12.narratives %}
+<div class="card border-primary border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-comments me-2 text-primary"></i>Narratives &amp; Growth</h6>
+        <span class="badge bg-secondary">heuristic, observed growth</span>
+    </div>
+    <div class="card-body">
+        {% for n in v12.narratives %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <span class="fw-bold">{{ n.name }}</span>
+                    {% if n.category %}
+                    <span class="badge bg-secondary ms-1">{{ n.category }}</span>
+                    {% endif %}
+                    {% if n.risk_level %}
+                    <span class="badge bg-{{ 'danger' if n.risk_level in ('High', 'Critical') else 'warning' if n.risk_level == 'Elevated' else 'info' }}">
+                        {{ n.risk_level }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Risk</small>
+                        <span class="fw-bold text-warning">{{ n.risk_score }}</span>
+                    </div>
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Growth</small>
+                        <span class="fw-bold text-info">{{ n.growth_score }}</span>
+                    </div>
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Confidence</small>
+                        <span class="fw-bold text-success">{{ n.confidence }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="small text-muted mt-2">
+                <span>{{ n.occurrence_count }} occurrences</span>
+                {% if n.platform_count %} &middot; <span>{{ n.platform_count }} platform{{ 's' if n.platform_count != 1 }}</span>{% endif %}
+                {% if n.is_cross_platform %} &middot; <span class="text-info">cross-platform</span>{% endif %}
+            </div>
+            {% if n.keywords %}
+            <div class="mt-1">
+                <small class="text-muted">Keywords: </small>
+                {% for kw in n.keywords[:8] %}
+                <span class="badge bg-secondary me-1">{{ kw }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if n.evidence and n.evidence.samples %}
+            <div class="mt-1 small text-muted">
+                <i class="fas fa-quote-left me-1"></i>{{ n.evidence.samples[:3]|join(' | ') }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            Growth scores reflect observed recurrence of a narrative across analyzed content.
+            This is heuristic and descriptive — it is not a prediction and does not imply
+            causality.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v12 and v12.coordination %}
+<div class="card border-info border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-link me-2 text-info"></i>Coordination Signals</h6>
+        <span class="badge bg-secondary">heuristic, observed patterns</span>
+    </div>
+    <div class="card-body">
+        {% for s in v12.coordination %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <span class="fw-bold">{{ s.signal_type|replace('_', ' ')|title }}</span>
+                    <span class="badge bg-{{ 'danger' if s.level in ('high', 'critical') else 'warning' if s.level == 'elevated' else 'info' }} ms-1">
+                        {{ s.level }}
+                    </span>
+                    {% if s.cluster_size %}
+                    <span class="badge bg-secondary ms-1">cluster: {{ s.cluster_size }}</span>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Score</small>
+                        <span class="fw-bold text-warning">{{ s.score }}</span>
+                    </div>
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Confidence</small>
+                        <span class="fw-bold text-success">{{ s.confidence }}</span>
+                    </div>
+                </div>
+            </div>
+            {% if s.summary %}
+            <p class="small mb-1 mt-2">{{ s.summary }}</p>
+            {% endif %}
+            <div class="small text-muted">
+                {% if s.comparisons_performed is not none %}
+                <span>{{ s.comparisons_performed }} comparison{{ 's' if s.comparisons_performed != 1 }} performed</span>
+                {% if s.comparisons_truncated %}
+                <span class="text-warning"> &middot; comparisons truncated (subset compared)</span>
+                {% endif %}
+                {% endif %}
+                {% if s.window_seconds %}
+                <span> &middot; window: {{ (s.window_seconds / 3600)|round(1) }}h</span>
+                {% endif %}
+            </div>
+            {% if s.related_entities %}
+            <div class="mt-1">
+                <small class="text-muted">Related entities: </small>
+                {% for e in s.related_entities[:5] %}
+                <span class="badge bg-secondary me-1">{{ e }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if s.reasons %}
+            <ul class="small mb-0 mt-1 ps-3">
+                {% for r in s.reasons[:6] %}
+                <li>{{ r }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            These signals describe observed similarities and timing in the analyzed comments.
+            They do not prove coordinated behavior, common authorship, conspiracy, or intent
+            by any person or group.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v12 and v12.propagation %}
+<div class="card border-success border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-share-nodes me-2 text-success"></i>Propagation Relationships</h6>
+        <span class="badge bg-secondary">heuristic, observed relationships</span>
+    </div>
+    <div class="card-body">
+        {% for e in v12.propagation %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <span class="fw-bold text-info">{{ e.source_platform }}</span>
+                    <i class="fas fa-arrow-right mx-2 text-muted"></i>
+                    <span class="fw-bold text-info">{{ e.target_platform }}</span>
+                    {% if e.relationship_type %}
+                    <span class="badge bg-secondary ms-1">{{ e.relationship_type|replace('_', ' ')|title }}</span>
+                    {% endif %}
+                    {% if e.is_cross_platform %}
+                    <span class="badge bg-success ms-1">cross-platform</span>
+                    {% endif %}
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Score</small>
+                        <span class="fw-bold text-warning">{{ e.propagation_score }}</span>
+                    </div>
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Similarity</small>
+                        <span class="fw-bold text-info">{{ e.similarity_score }}</span>
+                    </div>
+                    <div class="text-center px-2">
+                        <small class="text-muted d-block">Lag</small>
+                        <span class="fw-bold text-success">{{ (e.lag_seconds / 3600)|round(1) }}h</span>
+                    </div>
+                </div>
+            </div>
+            {% if e.shared_entities %}
+            <div class="mt-1">
+                <small class="text-muted">Shared entities: </small>
+                {% for ent in e.shared_entities[:5] %}
+                <span class="badge bg-secondary me-1">{{ ent }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if e.reasons %}
+            <ul class="small mb-0 mt-1 ps-3">
+                {% for r in e.reasons[:6] %}
+                <li>{{ r }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            These relationships describe observed temporal ordering and content similarity
+            between analyses. They do not establish actual causal propagation, shared
+            authorship, or intent.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v12 and v12.temporal %}
+<div class="card border-warning border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-clock me-2 text-warning"></i>Temporal Intelligence</h6>
+        <span class="badge bg-secondary">heuristic, observed growth</span>
+    </div>
+    <div class="card-body">
+        {% for t in v12.temporal %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <span class="fw-bold">{{ t.normalized_name|replace('_', ' ')|title }}</span>
+                </div>
+                <div class="text-center px-2">
+                    <small class="text-muted d-block">Growth</small>
+                    <span class="fw-bold text-info">{{ t.growth_score }}</span>
+                </div>
+            </div>
+            {% if t.signals %}
+            <div class="row g-2 mt-2">
+                {% for key, value in t.signals.items() if value is not none %}
+                <div class="col-4 col-md-2">
+                    <div class="p-2 bg-dark rounded text-center">
+                        <small class="text-muted d-block">{{ key|replace('_', ' ')|title }}</small>
+                        <span class="fw-bold">{{ value }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if t.first_seen_at or t.last_seen_at %}
+            <div class="small text-muted mt-2">
+                {% if t.first_seen_at %}<span>First seen: {{ t.first_seen_at[:10] }}</span>{% endif %}
+                {% if t.last_seen_at %}<span> &middot; Last seen: {{ t.last_seen_at[:10] }}</span>{% endif %}
+            </div>
+            {% endif %}
+            {% if t.reasons %}
+            <ul class="small mb-0 mt-1 ps-3">
+                {% for r in t.reasons[:6] %}
+                <li>{{ r }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            Temporal scores describe observed growth, recency, span, and recurrence of
+            narratives over time. These are heuristic, descriptive observations and are
+            not predictions or causal claims.
+        </p>
     </div>
 </div>
 {% endif %}
@@ -703,7 +1164,7 @@
             {% if data.transcript and data.transcript.source != 'unavailable' %}
             <li>Transcript intelligence enabled — comments are scored against video content for context relevance.</li>
             {% endif %}
-            <li>Export the full report as CSV or JSON for offline analysis and record-keeping.</li>
+            <li>Export the full report as CSV, JSON, XLSX, PDF, or DOCX for offline analysis and record-keeping.</li>
         </ul>
     </div>
 </div>

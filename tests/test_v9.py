@@ -263,6 +263,87 @@ class TestEntityHistoryService:
         assert len(freq) >= 1
         assert freq[0]['normalized_name'] == 'Tesla'
 
+    def test_get_entity_frequency_aggregation(self, app, db, user):
+        from services.entity_history_service import EntityHistoryService
+        svc = EntityHistoryService()
+        svc.record_entity_history(1, user.id, 'vid1', 'ch1', 'Tesla', 'COMPANY', 70.0, 20.0, 5, 80.0)
+        svc.record_entity_history(2, user.id, 'vid2', 'ch1', 'Tesla', 'COMPANY', 80.0, 10.0, 8, 90.0)
+        freq = svc.get_entity_frequency('ch1', user.id)
+        assert len(freq) == 1
+        row = freq[0]
+        assert row['normalized_name'] == 'Tesla'
+        assert row['entity_type'] == 'COMPANY'
+        assert row['appearances'] == 2
+        assert row['avg_sentiment'] == 75.0
+        assert row['avg_risk'] == 15.0
+
+    def test_get_entity_frequency_multiple_types_no_group_by_error(self, app, db, user):
+        from services.entity_history_service import EntityHistoryService
+        svc = EntityHistoryService()
+        svc.record_entity_history(1, user.id, 'vid1', 'ch1', 'Tesla', 'COMPANY', 70.0, 20.0, 5, 80.0)
+        svc.record_entity_history(2, user.id, 'vid2', 'ch1', 'Tesla', 'COMPANY', 80.0, 10.0, 8, 90.0)
+        svc.record_entity_history(3, user.id, 'vid3', 'ch1', 'Tesla', 'PERSON', 50.0, 30.0, 2, 40.0)
+        freq = svc.get_entity_frequency('ch1', user.id)
+        by_type = {row['entity_type']: row for row in freq}
+        assert set(by_type.keys()) == {'COMPANY', 'PERSON'}
+        assert by_type['COMPANY']['normalized_name'] == 'Tesla'
+        assert by_type['COMPANY']['appearances'] == 2
+        assert by_type['COMPANY']['avg_sentiment'] == 75.0
+        assert by_type['COMPANY']['avg_risk'] == 15.0
+        assert by_type['PERSON']['normalized_name'] == 'Tesla'
+        assert by_type['PERSON']['appearances'] == 1
+        assert by_type['PERSON']['avg_sentiment'] == 50.0
+        assert by_type['PERSON']['avg_risk'] == 30.0
+
+    def test_get_top_entities_by_channel_aggregation(self, app, db, user):
+        from services.entity_history_service import EntityHistoryService
+        svc = EntityHistoryService()
+        svc.record_entity_history(1, user.id, 'vid1', 'ch1', 'Tesla', 'COMPANY', 70.0, 20.0, 5, 80.0)
+        svc.record_entity_history(2, user.id, 'vid2', 'ch1', 'Tesla', 'COMPANY', 80.0, 10.0, 8, 90.0)
+        svc.record_entity_history(3, user.id, 'vid3', 'ch1', 'Elon Musk', 'PERSON', 60.0, 40.0, 3, 70.0)
+        top = svc.get_top_entities_by_channel('ch1', user.id, limit=10)
+        assert len(top) == 2
+        assert top[0]['normalized_name'] == 'Tesla'
+        assert top[0]['entity_type'] == 'COMPANY'
+        assert top[0]['appearances'] == 2
+        assert top[0]['avg_sentiment'] == 75.0
+        assert top[0]['avg_risk'] == 15.0
+        assert top[1]['normalized_name'] == 'Elon Musk'
+        assert top[1]['appearances'] == 1
+
+    def test_aggregation_queries_group_by_entity_type(self, app):
+        from sqlalchemy import func
+        from services.entity_history_service import EntityHistoryService
+        from models.entity_history import EntityHistory
+        from database import db
+
+        for builder in (
+            lambda: db.session.query(
+                EntityHistory.normalized_name,
+                EntityHistory.entity_type,
+                func.count(EntityHistory.id).label('appearances'),
+                func.avg(EntityHistory.sentiment_score).label('avg_sentiment'),
+                func.avg(EntityHistory.risk_score).label('avg_risk'),
+            ).filter_by(channel_id='ch1', user_id=1).group_by(
+                EntityHistory.normalized_name,
+                EntityHistory.entity_type,
+            ).order_by(func.count(EntityHistory.id).desc()),
+            lambda: db.session.query(
+                EntityHistory.normalized_name,
+                EntityHistory.entity_type,
+                func.count(EntityHistory.id).label('appearances'),
+                func.avg(EntityHistory.sentiment_score).label('avg_sentiment'),
+                func.avg(EntityHistory.risk_score).label('avg_risk'),
+            ).filter_by(channel_id='ch1', user_id=1).group_by(
+                EntityHistory.normalized_name,
+                EntityHistory.entity_type,
+            ).order_by(func.count(EntityHistory.id).desc()).limit(10),
+        ):
+            sql = str(builder().statement.compile(dialect=db.engine.dialect))
+            assert 'GROUP BY' in sql
+            assert 'entity_history.normalized_name' in sql
+            assert 'entity_history.entity_type' in sql
+
 
 class TestTopicHistoryService:
     def test_get_recurring_topics_empty(self, app, db, user):

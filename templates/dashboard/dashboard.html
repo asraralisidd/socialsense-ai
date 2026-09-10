@@ -105,7 +105,7 @@
                     </div>
                     <div class="col-6">
                         <small class="text-muted">Entity Risk</small>
-                        <div class="{% if stats.avg_entity_risk|default(0) > 50 %}text-danger{% elif stats.avg_entity_risk|default(0) > 25 %}text-warning{% else %}text-success{% endif %} fw-bold">{{ stats.avg_entity_risk|default(0) }}</div>
+                        <div class="{% if stats.avg_entity_risk|default(0) > 50 %}text-danger{% elif stats.avg_entity_risk|default(0) > 25 %}text-warning{% else %}text-success{% endif %} fw-bold">{% if stats.entity_risk_count %}{{ stats.avg_entity_risk }}{% else %}Unavailable{% endif %}</div>
                     </div>
                     <div class="col-3 col-md-2">
                         <div class="p-2 bg-dark rounded">
@@ -120,6 +120,307 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card border-secondary">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="fas fa-shield-halved me-2 text-warning"></i>Authenticity Intelligence
+                    <span class="badge bg-secondary ms-1">heuristic</span></h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-2 text-center">
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 bg-dark rounded">
+                            <div class="small text-muted">AI Videos</div>
+                            <div class="fw-bold text-danger">{{ stats.ai_videos or 0 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 bg-dark rounded">
+                            <div class="small text-muted">Authentic Videos</div>
+                            <div class="fw-bold text-success">{{ stats.authentic_videos or 0 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 bg-dark rounded">
+                            <div class="small text-muted">Deepfake Risk</div>
+                            <div class="fw-bold text-warning">{{ stats.deepfake_count or 0 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 bg-dark rounded">
+                            <div class="small text-muted">Voice Clones</div>
+                            <div class="fw-bold text-warning">{{ stats.voice_clone_count or 0 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2 bg-dark rounded">
+                            <div class="small text-muted">Avg Authenticity</div>
+                            <div class="fw-bold text-info">{% if stats.authenticity_count %}{{ stats.avg_authenticity }}{% else %}Unavailable{% endif %}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2 d-flex align-items-center justify-content-center">
+                        <small class="text-muted">Scores are heuristic probabilities, not proof of AI generation.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-secondary border-secondary py-2 mb-4">
+    <small><i class="fas fa-shield-halved me-1 text-warning"></i>
+        <strong>V12 Intelligence is heuristic and non-causal.</strong>
+        Indicators below are computed from available content and metadata; they are
+        <strong>not proof</strong> of intent, authorship, coordination, causality or maliciousness.
+        Signals that could not be computed are shown as <em>Unavailable</em>, never as zero.
+    </small>
+</div>
+
+{% set threat_components = [
+    ('authenticity', 'Authenticity'), ('coordination', 'Coordination'),
+    ('narrative', 'Narrative Risk'), ('propagation', 'Propagation'),
+    ('temporal', 'Temporal'), ('entity', 'Entity Risk')
+] %}
+
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card border-secondary">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="fas fa-shield-halved me-2 text-warning"></i>Threat Assessment
+                    <span class="badge bg-secondary ms-1">heuristic</span></h6>
+            </div>
+            <div class="card-body">
+                {% if v12.threat and v12.threat.recent_assessments %}
+                {% set t = v12.threat.recent_assessments[0] %}
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 bg-dark rounded text-center">
+                            <div class="small text-muted">Threat Level</div>
+                            {% set tl = t.threat_level|string %}
+                            <span class="badge bg-{{ 'success' if tl == 'Minimal' else 'info' if tl == 'Low' else 'warning' if tl == 'Moderate' else 'danger' if tl in ('High', 'Elevated') else 'secondary' }}">
+                                {{ tl if tl else 'Unavailable' }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 bg-dark rounded text-center">
+                            <div class="small text-muted">Overall Score</div>
+                            <div class="fw-bold text-warning">{{ t.overall_threat_score if t.overall_threat_score is not none else 'Unavailable' }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 bg-dark rounded text-center">
+                            <div class="small text-muted">Confidence</div>
+                            <div class="fw-bold text-info">{{ t.confidence if t.confidence is not none else 'Unavailable' }}%</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2 bg-dark rounded text-center">
+                            <div class="small text-muted">Evidence Coverage</div>
+                            <div class="fw-bold text-success">{{ t.evidence_coverage if t.evidence_coverage is not none else 'Unavailable' }}%</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-2">
+                    {% for key, label in threat_components %}
+                    <div class="col-6 col-md-4 col-lg-2">
+                        <div class="p-2 bg-dark rounded">
+                            <div class="small text-muted">{{ label }}
+                                {% if t.capability_labels and key in t.capability_labels %}
+                                <span class="badge bg-secondary ms-1" title="Capability">{{ t.capability_labels[key] }}</span>
+                                {% endif %}
+                            </div>
+                            {% if t.component_scores and key in t.component_scores %}
+                            <div class="fw-bold text-white">{{ t.component_scores[key] }}</div>
+                            {% else %}
+                            <div class="text-muted"><em>Unavailable</em></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if t.limitations %}
+                <div class="mt-3">
+                    <small class="text-muted"><i class="fas fa-triangle-exclamation me-1"></i><strong>Limitations:</strong></small>
+                    <ul class="small text-muted mb-0">
+                        {% for lim in t.limitations[:3] %}
+                        <li>{{ lim }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-shield-halved fa-3x mb-2"></i>
+                    <p class="mb-0"><em>Unavailable — insufficient evidence.</em> No threat assessments have been produced yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-secondary h-100">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="fas fa-comments me-2 text-primary"></i>Narratives &amp; Growth
+                    <span class="badge bg-secondary ms-1">heuristic</span></h6>
+            </div>
+            <div class="card-body">
+                {% if v12.narrative and v12.narrative.top_narratives %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="small text-muted">Total Narratives: <strong>{{ v12.narrative.total_narratives }}</strong></span>
+                    <span class="small text-muted">Cross-Platform: <strong>{{ v12.narrative.cross_platform_narratives|length }}</strong></span>
+                </div>
+                <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+                    <table class="table table-dark table-hover table-sm mb-0">
+                        <thead><tr><th>Narrative</th><th>Risk</th><th>Growth</th><th>Occurrences</th><th>Platforms</th></tr></thead>
+                        <tbody>
+                        {% for n in v12.narrative.top_narratives[:5] %}
+                        <tr>
+                            <td class="small">{{ n.name|truncate(42) }}
+                                {% if n.is_cross_platform %}<span class="badge bg-info text-dark ms-1">cross-platform</span>{% endif %}
+                            </td>
+                            <td><span class="badge bg-{{ 'success' if n.risk_level == 'Low' else 'warning' if n.risk_level == 'Medium' else 'danger' }}">{{ n.risk_level }}</span> {{ n.risk_score }}</td>
+                            <td>{{ n.growth_score if n.growth_score is not none else 'Unavailable' }}</td>
+                            <td>{{ n.occurrence_count }}</td>
+                            <td>{{ n.platform_count }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-comments fa-3x mb-2"></i>
+                    <p class="mb-0"><em>Unavailable — insufficient evidence.</em> No recurring narratives detected yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-secondary h-100">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="fas fa-satellite-dish me-2 text-danger"></i>Coordination Signals
+                    <span class="badge bg-secondary ms-1">heuristic</span></h6>
+            </div>
+            <div class="card-body">
+                {% if v12.coordination %}
+                {% for s in v12.coordination[:6] %}
+                <div class="border border-secondary rounded p-2 mb-2 bg-dark">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="small text-white">{{ s.signal_type|replace('_', ' ')|title }}</span>
+                        <span class="badge bg-{{ 'info' if s.level == 'low' else 'warning' if s.level == 'elevated' else 'danger' if s.level == 'suspicious' else 'secondary' }}">{{ s.level }}</span>
+                    </div>
+                    <div class="small text-muted mt-1">
+                        Score <strong class="text-white">{{ s.score if s.score is not none else 'Unavailable' }}</strong>
+                        &middot; Cluster <strong>{{ s.cluster_size }}</strong>
+                        &middot; Comparisons <strong>{{ s.comparisons_performed }}</strong>
+                        {% if s.comparisons_truncated %}<span class="badge bg-warning text-dark ms-1" title="Comparison budget exhausted">truncated</span>{% endif %}
+                    </div>
+                    {% if s.summary %}
+                    <div class="small text-muted mt-1"><em>{{ s.summary|truncate(140) }}</em></div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-satellite-dish fa-3x mb-2"></i>
+                    <p class="mb-0"><em>Unavailable — insufficient evidence.</em> No coordination signals detected.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card border-secondary h-100">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="fas fa-arrows-spin me-2 text-info"></i>Propagation Relationships
+                    <span class="badge bg-secondary ms-1">non-causal</span></h6>
+            </div>
+            <div class="card-body">
+                {% if v12.propagation and v12.propagation.top_events %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="small text-muted">Total Events: <strong>{{ v12.propagation.total_events }}</strong></span>
+                    <span class="small text-muted">Cross-Platform: <strong>{{ v12.propagation.cross_platform_events }}</strong></span>
+                </div>
+                <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+                    <table class="table table-dark table-hover table-sm mb-0">
+                        <thead><tr><th>Relationship</th><th>Platforms</th><th>Score</th><th>Lag</th></tr></thead>
+                        <tbody>
+                        {% for e in v12.propagation.top_events[:5] %}
+                        <tr>
+                            <td class="small">{{ e.relationship_type|replace('_', ' ')|title }}</td>
+                            <td class="small">{{ e.source_platform }} &rarr; {{ e.target_platform }}</td>
+                            <td>{{ e.propagation_score if e.propagation_score is not none else 'Unavailable' }}</td>
+                            <td class="small">
+                                {% if e.lag_seconds is not none %}
+                                {% set s = e.lag_seconds|int %}
+                                {% if s >= 3600 %}{{ (s//3600) }}h {{ ((s%3600)//60) }}m{% elif s >= 60 %}{{ s//60 }}m {{ s%60 }}s{% else %}{{ s }}s{% endif %}
+                                {% else %}Unavailable{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <small class="text-muted d-block mt-2"><i class="fas fa-circle-info me-1"></i>Relationships describe observed similarity or temporal correlation only. They do not prove that content was propagated or coordinated by any party.</small>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-arrows-spin fa-3x mb-2"></i>
+                    <p class="mb-0"><em>Unavailable — insufficient evidence.</em> No propagation relationships detected.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card border-secondary h-100">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="fas fa-clock me-2 text-success"></i>Temporal Intelligence
+                    <span class="badge bg-secondary ms-1">heuristic</span></h6>
+            </div>
+            <div class="card-body">
+                {% if v12.temporal and v12.temporal.narratives %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="small text-muted">Narratives Scored: <strong>{{ v12.temporal.narrative_count }}</strong></span>
+                    <span class="small text-muted">First Seen: <strong>{{ v12.temporal.first_seen_any|string|truncate(10, True, '') if v12.temporal.first_seen_any else 'Unavailable' }}</strong></span>
+                </div>
+                <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+                    <table class="table table-dark table-hover table-sm mb-0">
+                        <thead><tr><th>Narrative</th><th>Growth</th><th>Risk</th><th>Occurrences</th><th>Platforms</th></tr></thead>
+                        <tbody>
+                        {% for n in v12.temporal.narratives[:5] %}
+                        <tr>
+                            <td class="small">{{ n.name|truncate(42) }}
+                                {% if n.is_cross_platform %}<span class="badge bg-info text-dark ms-1">cross-platform</span>{% endif %}
+                            </td>
+                            <td>{{ n.growth_score if n.growth_score is not none else 'Unavailable' }}</td>
+                            <td><span class="badge bg-{{ 'success' if n.risk_level == 'Low' else 'warning' if n.risk_level == 'Medium' else 'danger' }}">{{ n.risk_level }}</span></td>
+                            <td>{{ n.occurrence_count }}</td>
+                            <td>{{ n.platform_count }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-clock fa-3x mb-2"></i>
+                    <p class="mb-0"><em>Unavailable — insufficient evidence.</em> No temporal growth signals available.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

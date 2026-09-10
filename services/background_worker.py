@@ -83,63 +83,71 @@ class BackgroundWorker:
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 25, 'Fetching Content')
+                self.job_repo.update_progress(job_id, 20, 'Fetching Content')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 40, 'Fetching Comments')
+                self.job_repo.update_progress(job_id, 30, 'Fetching Comments')
                 self.log_repo.create_log(job_id, 'INFO', f'Fetching up to {job.comment_limit} comments.', 'Fetching')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 60, 'Running AI Analysis')
+                self.job_repo.update_progress(job_id, 40, 'Running AI Analysis')
                 self.log_repo.create_log(job_id, 'INFO', 'AI analysis engines running.', 'Analysis')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 75, 'Generating Summary')
+                self.job_repo.update_progress(job_id, 50, 'Generating Summary')
                 self.log_repo.create_log(job_id, 'INFO', 'Generating analysis summary.', 'Summary')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 80, 'Processing Transcript')
+                self.job_repo.update_progress(job_id, 55, 'Processing Transcript')
                 if job.platform == 'youtube':
                     self.log_repo.create_log(job_id, 'INFO', 'Fetching and analyzing video transcript.', 'Transcript')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 92, 'Saving Results')
-
-                self._check_cancelled(job_id)
-
-                self.job_repo.update_progress(job_id, 87, 'Extracting Entities')
+                self.job_repo.update_progress(job_id, 60, 'Extracting Entities')
                 self.log_repo.create_log(job_id, 'INFO', 'Extracting and analyzing entities.', 'Entity')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 90, 'Analyzing Entity Context')
+                self.job_repo.update_progress(job_id, 65, 'Analyzing Entity Context')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 93, 'Loading Channel History')
+                self.job_repo.update_progress(job_id, 70, 'Loading Channel History')
                 self.log_repo.create_log(job_id, 'INFO', 'Loading channel context and video history.', 'Channel')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 95, 'Computing Historical Trends')
+                self.job_repo.update_progress(job_id, 75, 'Computing Historical Trends')
                 self.log_repo.create_log(job_id, 'INFO', 'Computing historical entity and topic trends.', 'Trends')
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 97, 'Generating Context Intelligence')
+                self.job_repo.update_progress(job_id, 78, 'Generating Context Intelligence')
+
+                # Build a progress callback that reports V12 stage progress
+                # from within the analysis call (monotonic, never exceeds 100).
+                def _progress(pct, step):
+                    try:
+                        self.job_repo.update_progress(job_id, pct, step)
+                        self.log_repo.create_log(job_id, 'INFO', step, 'Intelligence')
+                    except Exception:
+                        db.session.rollback()
+                        logger.warning(f'Progress update failed for job {job_id}')
 
                 if job.platform == 'youtube':
                     result = self.analysis_service.create_youtube_analysis(
-                        job.user_id, job.source_input, comment_limit=job.comment_limit
+                        job.user_id, job.source_input, comment_limit=job.comment_limit,
+                        progress_callback=_progress,
                     )
                 elif job.platform == 'reddit':
                     result = self.analysis_service.create_reddit_analysis(
-                        job.user_id, job.source_input, comment_limit=job.comment_limit
+                        job.user_id, job.source_input, comment_limit=job.comment_limit,
+                        progress_callback=_progress,
                     )
                 else:
                     self.job_repo.mark_failed(job_id, f'Unknown platform: {job.platform}')
@@ -153,7 +161,7 @@ class BackgroundWorker:
 
                 self._check_cancelled(job_id)
 
-                self.job_repo.update_progress(job_id, 95, 'Generating Exports')
+                self.job_repo.update_progress(job_id, 99, 'Saving Results')
                 self.log_repo.create_log(job_id, 'INFO', f'Analysis complete. {result["comment_count"]} comments processed.', 'Complete')
 
                 self.job_repo.mark_completed(job_id, analysis_id=result['analysis_id'])
@@ -164,6 +172,7 @@ class BackgroundWorker:
                 self.log_repo.create_log(job_id, 'INFO', 'Job cancelled by user.', 'Cancellation')
 
             except Exception as e:
+                db.session.rollback()
                 error_msg = f'{type(e).__name__}: {str(e)}'
                 logger.error(f'Background worker failed for job {job_id}: {error_msg}', exc_info=True)
                 self.job_repo.mark_failed(job_id, error_msg)
