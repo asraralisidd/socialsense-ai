@@ -65,6 +65,34 @@
             </div>
         </div>
         {% endif %}
+
+        <div class="card border-secondary">
+            <div class="card-header bg-dark">
+                <h5 class="mb-0"><i class="fas fa-key me-2"></i>Change Password</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('auth.password_change') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="current_password" class="form-label">Current password</label>
+                        <input type="password" class="form-control bg-dark text-light border-secondary"
+                               id="current_password" name="current_password" required autocomplete="current-password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">New password</label>
+                        <input type="password" class="form-control bg-dark text-light border-secondary"
+                               id="new_password" name="new_password" required autocomplete="new-password">
+                        <div class="form-text">Minimum 8 characters with uppercase, lowercase, and digit.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Confirm new password</label>
+                        <input type="password" class="form-control bg-dark text-light border-secondary"
+                               id="confirm_password" name="confirm_password" required autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Change password</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

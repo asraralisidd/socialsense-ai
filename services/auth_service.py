@@ -49,6 +49,21 @@ class AuthService:
             logger.warning(f'Login rate-limit unavailable, allowing: {exc}')
             return True
 
+    def _validate_password(self, password):
+        """Shared password policy: minimum 8 characters with upper/lower/digit.
+
+        Returns an error string or None when the password complies.
+        """
+        if not password or len(password) < 8:
+            return 'Password must be at least 8 characters.'
+        if not re.search(r'[A-Z]', password):
+            return 'Password must contain an uppercase letter.'
+        if not re.search(r'[a-z]', password):
+            return 'Password must contain a lowercase letter.'
+        if not re.search(r'[0-9]', password):
+            return 'Password must contain a number.'
+        return None
+
     def register(self, username, email, password, confirm_password):
         errors = {}
 
@@ -62,14 +77,9 @@ class AuthService:
         elif self.user_repo.email_exists(email):
             errors['email'] = 'Email already registered.'
 
-        if not password or len(password) < 8:
-            errors['password'] = 'Password must be at least 8 characters.'
-        elif not re.search(r'[A-Z]', password):
-            errors['password'] = 'Password must contain an uppercase letter.'
-        elif not re.search(r'[a-z]', password):
-            errors['password'] = 'Password must contain a lowercase letter.'
-        elif not re.search(r'[0-9]', password):
-            errors['password'] = 'Password must contain a number.'
+        password_error = self._validate_password(password)
+        if password_error:
+            errors['password'] = password_error
 
         if password != confirm_password:
             errors['confirm_password'] = 'Passwords do not match.'
@@ -110,6 +120,44 @@ class AuthService:
 
     def logout(self):
         logout_user()
+
+    def change_password(self, user, current_password, new_password,
+                        confirm_password):
+        """Change the password of the given (already authenticated) user.
+
+        Verifies the current password first; nothing is modified unless
+        every check passes. On success the stored hash is replaced and the
+        current session is invalidated via ``logout_user()``, forcing
+        re-authentication. Never exposes hashes.
+        """
+        errors = {}
+
+        if user is None:
+            return {'success': False,
+                    'errors': {'general': 'Authentication required.'}}
+
+        if not current_password or not check_password_hash(
+                user.password_hash, current_password):
+            errors['current_password'] = 'Current password is incorrect.'
+
+        password_error = self._validate_password(new_password)
+        if password_error:
+            errors['new_password'] = password_error
+        elif check_password_hash(user.password_hash, new_password):
+            errors['new_password'] = \
+                'New password must be different from the current password.'
+
+        if new_password != confirm_password:
+            errors['confirm_password'] = 'Passwords do not match.'
+
+        if errors:
+            return {'success': False, 'errors': errors}
+
+        from database import db
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        logout_user()
+        return {'success': True, 'errors': {}}
 
     def get_profile_data(self, user):
         analysis_count = self.user_repo.count_analyses(user.id) if hasattr(self.user_repo, 'count_analyses') else 0

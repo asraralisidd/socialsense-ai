@@ -82,6 +82,29 @@ def logout():
     return redirect(url_for('index'))
 
 
+@auth_bp.route('/password/change', methods=['POST'])
+@login_required
+def password_change():
+    """Self-service password change for the current user only.
+
+    No target user is accepted from input; the operation applies solely
+    to ``current_user``. Success invalidates the session (see
+    ``AuthService.change_password``) and redirects to login.
+    """
+    result = auth_service.change_password(
+        current_user,
+        request.form.get('current_password', ''),
+        request.form.get('new_password', ''),
+        request.form.get('confirm_password', ''),
+    )
+    if result['success']:
+        flash('Password changed. Please log in again.', 'success')
+        return redirect(url_for('auth.login'))
+    for error in result['errors'].values():
+        flash(error, 'danger')
+    return redirect(url_for('auth.profile'))
+
+
 @auth_bp.route('/profile')
 @login_required
 def profile():
