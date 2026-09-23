@@ -110,3 +110,49 @@ def password_change():
 def profile():
     data = auth_service.get_profile_data(current_user)
     return render_template('auth/profile.html', data=data)
+
+
+@auth_bp.route('/password/forgot', methods=['GET', 'POST'])
+def password_forgot():
+    """Start account recovery. Never reveals whether the email exists.
+
+    The reset token is handed back ONLY through the development-only
+    mechanism (see AuthService); production responses carry no token
+    because no email delivery channel exists yet.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+    token = None
+    if request.method == 'POST':
+        result = auth_service.request_password_reset(
+            request.form.get('email', ''))
+        if not result['success']:
+            for error in result['errors'].values():
+                flash(error, 'danger')
+            return render_template('auth/forgot.html')
+        flash(result['message'], 'info')
+        token = result.get('token')
+    return render_template('auth/forgot.html', dev_token=token)
+
+
+@auth_bp.route('/password/reset/<token>', methods=['GET', 'POST'])
+def password_reset(token):
+    """Consume a reset token. Operates only on the token-bound account."""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+    if request.method == 'POST':
+        result = auth_service.reset_password(
+            token,
+            request.form.get('new_password', ''),
+            request.form.get('confirm_password', ''),
+        )
+        if result['success']:
+            flash('Password has been reset. Please log in.', 'success')
+            return redirect(url_for('auth.login'))
+        for error in result['errors'].values():
+            flash(error, 'danger')
+    user, reason = auth_service.verify_reset_token(token)
+    if user is None:
+        flash(reason, 'danger')
+        return redirect(url_for('auth.password_forgot'))
+    return render_template('auth/reset.html', token=token)

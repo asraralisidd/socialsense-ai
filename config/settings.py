@@ -27,6 +27,9 @@ class Config:
 
     LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.environ.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', '10'))
     LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', '300'))
+    PASSWORD_RESET_TOKEN_MAX_AGE = int(os.environ.get('PASSWORD_RESET_TOKEN_MAX_AGE', '3600'))
+    PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS', '5'))
+    PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', '3600'))
 
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', os.environ.get('REDIS_URL', 'redis://localhost:6379/0'))
