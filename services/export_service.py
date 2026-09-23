@@ -14,6 +14,7 @@ from services.v12_context_service import (
     HEURISTIC_DISCLAIMER,
     THREAT_DISCLAIMER,
 )
+from services.v13_context_service import build_v13_context, V13_DISCLAIMER
 
 
 _UNAVAILABLE = 'Unavailable'
@@ -138,6 +139,12 @@ class ExportService:
 
         v12 = build_v12_context(analysis_id, user_id)
 
+        try:
+            v13 = build_v13_context(analysis_id, user_id)
+        except Exception:
+            v13 = {'baseline': None, 'comparison': None,
+                   'evolution': None, 'evidence': None}
+
         return {
             'analysis': analysis,
             'youtube': yt,
@@ -146,8 +153,10 @@ class ExportService:
             'media': media,
             'entities': entity_data,
             'v12': v12,
+            'v13': v13,
             'heuristic_disclaimer': HEURISTIC_DISCLAIMER,
             'threat_disclaimer': THREAT_DISCLAIMER,
+            'v13_disclaimer': V13_DISCLAIMER,
         }
 
     def _export_record(self, analysis_id, format_type, filepath):
@@ -259,6 +268,57 @@ class ExportService:
                                          value])
             writer.writerow([])
 
+    def _write_v13_csv(self, writer, v13):
+        """Append bounded V13 historical/explainability sections."""
+        baseline = (v13 or {}).get('baseline') or {}
+        metrics = baseline.get('metrics') or {}
+        if metrics:
+            writer.writerow(['# V13 Historical Context (heuristic, non-causal)'])
+            writer.writerow(['Metric', 'Current', 'Historical Baseline',
+                             'Change', 'Sample Size', 'Status'])
+            for key in sorted(metrics):
+                m = metrics[key]
+                writer.writerow([
+                    m.get('metric'), _fmt_number(m.get('current')),
+                    _fmt_number(m.get('baseline')),
+                    _fmt_number(m.get('deviation')),
+                    m.get('sample_size'), _display(m.get('availability'))])
+            writer.writerow([])
+
+        comparison = (v13 or {}).get('comparison') or {}
+        metrics = comparison.get('metrics') or {}
+        if metrics:
+            writer.writerow(['# V13 Cross-Analysis Comparison (heuristic, non-causal)'])
+            writer.writerow(['Current Analysis',
+                             comparison.get('current_analysis_id')])
+            writer.writerow(['Historical Analyses',
+                             len(comparison.get('historical_analysis_ids') or [])])
+            writer.writerow(['Window (days)', comparison.get('window_days')])
+            writer.writerow(['Metric', 'Current', 'Historical Baseline',
+                             'Delta', 'Sample Size', 'Status'])
+            for key in sorted(metrics):
+                m = metrics[key]
+                writer.writerow([
+                    m.get('metric'), _fmt_number(m.get('current')),
+                    _fmt_number(m.get('baseline')), _fmt_number(m.get('delta')),
+                    m.get('sample_size'), _display(m.get('availability'))])
+            writer.writerow([])
+
+        evolution = (v13 or {}).get('evolution') or {}
+        narratives = evolution.get('narratives') or []
+        if narratives:
+            writer.writerow(['# V13 Narrative Evolution (heuristic, observed)'])
+            writer.writerow(['Narrative', 'State', 'Current', 'Prior',
+                             'Recent', 'First Seen', 'Last Seen'])
+            for n in narratives[:20]:
+                writer.writerow([
+                    _display(n.get('name') or n.get('normalized_name')),
+                    _display(n.get('state')), n.get('current_occurrences'),
+                    n.get('prior_occurrences'), n.get('recent_occurrences'),
+                    _display(n.get('first_seen_at')),
+                    _display(n.get('last_seen_at'))])
+            writer.writerow([])
+
     def _write_evidence_csv(self, writer, bundle):
         """Append bounded Evidence sections (V11 media + V12 reasons)."""
         media = bundle.get('media')
@@ -293,6 +353,24 @@ class ExportService:
             writer.writerow(['Source', 'Label', 'Detail'])
             for source, label, detail in rows[:30]:
                 writer.writerow([source, label, detail])
+            writer.writerow([])
+
+        v13 = bundle.get('v13') or {}
+        evidence = v13.get('evidence') or {}
+        links = evidence.get('links') or []
+        if links:
+            writer.writerow(['# Evidence: V13 Chain (heuristic, non-causal)'])
+            writer.writerow(['Component', 'Claim', 'Evidence Type', 'Source',
+                             'Reference', 'Score', 'Verified'])
+            for link in links[:25]:
+                writer.writerow([
+                    _display(link.get('component')),
+                    _display(link.get('claim')),
+                    _display(link.get('evidence_type')),
+                    _display(link.get('source_table')),
+                    _display(link.get('ref')),
+                    _fmt_number(link.get('score')),
+                    'Yes' if link.get('verified') else 'No'])
             writer.writerow([])
 
     def generate_csv(self, analysis_id, user_id):
@@ -443,6 +521,7 @@ class ExportService:
 
         writer.writerow([])
         self._write_v12_csv(writer, bundle['v12'])
+        self._write_v13_csv(writer, bundle.get('v13'))
         self._write_evidence_csv(writer, bundle)
 
         csv_content = output.getvalue()
@@ -601,6 +680,19 @@ class ExportService:
             'temporal': v12.get('temporal') or [],
             'heuristic_disclaimer': HEURISTIC_DISCLAIMER,
             'threat_disclaimer': THREAT_DISCLAIMER,
+        }
+
+        try:
+            v13 = build_v13_context(analysis_id, user_id)
+        except Exception:
+            v13 = {'baseline': None, 'comparison': None,
+                   'evolution': None, 'evidence': None}
+        data['v13'] = {
+            'historical_context': v13.get('baseline'),
+            'cross_analysis': v13.get('comparison'),
+            'narrative_evolution': v13.get('evolution'),
+            'evidence': v13.get('evidence'),
+            'v13_disclaimer': V13_DISCLAIMER,
         }
 
         from models.entity import Entity
@@ -889,6 +981,92 @@ class ExportService:
                 'rows': rows,
                 'unavailable': not rows}
 
+    def _v13_historical_section(self, bundle):
+        metrics = ((bundle.get('v13') or {}).get('baseline') or {}).get('metrics') or {}
+        rows = []
+        for key in sorted(metrics):
+            m = metrics[key]
+            rows.append([f"Metric: {m.get('metric')}",
+                         _fmt_number(m.get('current'))])
+            rows.append(['Historical Baseline', _fmt_number(m.get('baseline'))])
+            rows.append(['Change', _fmt_number(m.get('deviation'))])
+            rows.append(['Sample Size', _display(m.get('sample_size'))])
+            rows.append(['Status', _display(m.get('availability'))])
+        return {'title': 'V13 Historical Context',
+                'subtitle': 'Heuristic baseline vs prior analyses (non-causal)',
+                'disclaimer': V13_DISCLAIMER,
+                'rows': rows,
+                'unavailable': not rows}
+
+    def _v13_comparison_section(self, bundle):
+        comparison = (bundle.get('v13') or {}).get('comparison') or {}
+        metrics = comparison.get('metrics') or {}
+        rows = []
+        if metrics:
+            rows.append(['Historical Analyses',
+                         len(comparison.get('historical_analysis_ids') or [])])
+            rows.append(['Window (days)', _display(comparison.get('window_days'))])
+            for key in sorted(metrics):
+                m = metrics[key]
+                rows.append([f"Metric: {m.get('metric')}",
+                             _fmt_number(m.get('current'))])
+                rows.append(['Historical Baseline', _fmt_number(m.get('baseline'))])
+                rows.append(['Delta', _fmt_number(m.get('delta'))])
+                rows.append(['Sample Size', _display(m.get('sample_size'))])
+                rows.append(['Status', _display(m.get('availability'))])
+        return {'title': 'V13 Cross-Analysis Comparison',
+                'subtitle': 'Current vs prior analyses by the same user (non-causal)',
+                'disclaimer': V13_DISCLAIMER,
+                'rows': rows,
+                'unavailable': not rows}
+
+    def _v13_evolution_section(self, bundle):
+        narratives = ((bundle.get('v13') or {}).get('evolution') or {}).get('narratives') or []
+        rows = []
+        for n in narratives[:20]:
+            rows.append(['Narrative',
+                         _display(n.get('name') or n.get('normalized_name'))])
+            rows.append(['State', _display(n.get('state'))])
+            rows.append(['Current Occurrences',
+                         _display(n.get('current_occurrences'))])
+            rows.append(['Prior Occurrences',
+                         _display(n.get('prior_occurrences'))])
+            rows.append(['Recent Occurrences',
+                         _display(n.get('recent_occurrences'))])
+            if n.get('first_seen_at'):
+                rows.append(['First Seen', n.get('first_seen_at')])
+            if n.get('last_seen_at'):
+                rows.append(['Last Seen', n.get('last_seen_at')])
+            if n.get('gap_days') is not None:
+                rows.append(['Span (days)', n.get('gap_days')])
+            if n.get('limitation'):
+                rows.append(['Limitation', n.get('limitation')])
+        return {'title': 'V13 Narrative Evolution',
+                'subtitle': 'Observed occurrence patterns (descriptive, non-causal)',
+                'disclaimer': V13_DISCLAIMER,
+                'rows': rows,
+                'unavailable': not rows}
+
+    def _v13_evidence_section(self, bundle):
+        links = ((bundle.get('v13') or {}).get('evidence') or {}).get('links') or []
+        rows = []
+        for link in links[:25]:
+            rows.append(['Component', _display(link.get('component'))])
+            rows.append(['Claim', _display(link.get('claim'))])
+            rows.append(['Evidence Type', _display(link.get('evidence_type'))])
+            rows.append(['Source', _display(link.get('source_table'))])
+            rows.append(['Reference', _display(link.get('ref'))])
+            if link.get('snippet'):
+                rows.append(['Snippet', link.get('snippet')])
+            rows.append(['Score', _fmt_number(link.get('score'))])
+            rows.append(['Verified',
+                         'Yes' if link.get('verified') else 'No'])
+        return {'title': 'V13 Explainable Evidence',
+                'subtitle': 'Claims traced to stored evidence (heuristic, non-causal)',
+                'disclaimer': V13_DISCLAIMER,
+                'rows': rows,
+                'unavailable': not rows}
+
     def _all_sections(self, bundle):
         return [
             self._threat_section(bundle),
@@ -899,6 +1077,10 @@ class ExportService:
             self._temporal_section(bundle),
             self._entity_section(bundle),
             self._evidence_section(bundle),
+            self._v13_historical_section(bundle),
+            self._v13_comparison_section(bundle),
+            self._v13_evolution_section(bundle),
+            self._v13_evidence_section(bundle),
         ]
 
 # ------------------------------------------------------------------ XLSX

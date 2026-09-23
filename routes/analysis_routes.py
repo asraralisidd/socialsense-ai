@@ -4,6 +4,7 @@ from services.analysis_service import AnalysisService
 from services.reddit_service import RedditService
 from services.job_service import JobService
 from services.v12_context_service import build_v12_context
+from services.v13_context_service import build_v13_context
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/analysis')
 analysis_service = AnalysisService()
@@ -21,6 +22,20 @@ def _build_v12_result_context(analysis_id, user_id, narrative_limit=5,
     return build_v12_context(analysis_id, user_id,
                              narrative_limit=narrative_limit,
                              temporal_limit=temporal_limit)
+
+
+def _build_v13_result_context(analysis_id, user_id):
+    """Bounded read-only V13 context for the analysis result page.
+
+    Never raises: every section is isolated inside the builder, so a V13
+    failure degrades to unavailable states instead of breaking the
+    core V1-V12 result page.
+    """
+    try:
+        return build_v13_context(analysis_id, user_id)
+    except Exception:
+        return {'baseline': None, 'comparison': None,
+                'evolution': None, 'evidence': None}
 
 
 @analysis_bp.route('/new', methods=['GET', 'POST'])
@@ -75,7 +90,8 @@ def result(analysis_id):
         return redirect(url_for('dashboard.index'))
 
     v12 = _build_v12_result_context(analysis_id, current_user.id)
-    return render_template('analysis/result.html', data=data, v12=v12)
+    v13 = _build_v13_result_context(analysis_id, current_user.id)
+    return render_template('analysis/result.html', data=data, v12=v12, v13=v13)
 
 
 @analysis_bp.route('/history')

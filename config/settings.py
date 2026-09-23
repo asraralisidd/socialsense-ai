@@ -121,6 +121,15 @@ class Config:
     THREAT_MAX_REASONS = int(os.environ.get('THREAT_MAX_REASONS', '20'))
     THREAT_MAX_LIMITATIONS = int(os.environ.get('THREAT_MAX_LIMITATIONS', '10'))
 
+    # V13 Historical Context & Explainable Intelligence (Phase B)
+    ENABLE_V13_EVIDENCE_CHAIN = os.environ.get('ENABLE_V13_EVIDENCE_CHAIN', 'true').lower() == 'true'
+    ENABLE_V13_HISTORICAL_BASELINE = os.environ.get('ENABLE_V13_HISTORICAL_BASELINE', 'true').lower() == 'true'
+    V13_MAX_LINKS_PER_ASSESSMENT = int(os.environ.get('V13_MAX_LINKS_PER_ASSESSMENT', '25'))
+    V13_MAX_HISTORY_ANALYSES = int(os.environ.get('V13_MAX_HISTORY_ANALYSES', '20'))
+    V13_HISTORY_WINDOW_DAYS = int(os.environ.get('V13_HISTORY_WINDOW_DAYS', '90'))
+    V13_MIN_HISTORY_SAMPLE = int(os.environ.get('V13_MIN_HISTORY_SAMPLE', '3'))
+    V13_EVIDENCE_SNIPPET_CHARS = int(os.environ.get('V13_EVIDENCE_SNIPPET_CHARS', '160'))
+
     USE_CELERY = os.environ.get('USE_CELERY', 'false').lower() == 'true'
 
 

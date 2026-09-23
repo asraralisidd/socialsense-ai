@@ -56,6 +56,7 @@ class ReportGenerationService:
             'entity_intelligence': self._get_entity_report_data(report.user_id),
             'channel_intelligence': channel_data,
             'authenticity_intelligence': self._get_authenticity_report_data(report.user_id),
+            'v13_historical_context': self._get_v13_report_data(report.user_id),
             'top_risky_comments': [{
                 'text': c.comment_text[:200] if c.comment_text else '',
                 'risk_score': c.risk_score,
@@ -181,7 +182,111 @@ class ReportGenerationService:
             'avg_ai_probability': round(avg_ai, 1),
         }
 
+    def _get_v13_report_data(self, user_id):
+        """Bounded V13 summary for the user's latest analysis.
+
+        Single shared ``build_v13_context`` call (no duplicated logic).
+        Returns None when no analysis exists or V13 is unavailable, so the
+        report renders an unavailable state instead of fabricated data.
+        """
+        from models.analysis import Analysis
+        latest = Analysis.query.filter_by(user_id=user_id).order_by(
+            Analysis.created_at.desc(), Analysis.id.desc()).first()
+        if not latest:
+            return None
+        try:
+            from services.v13_context_service import build_v13_context
+            context = build_v13_context(latest.id, user_id)
+        except Exception:
+            return None
+        baseline = (context.get('baseline') or {}).get('metrics') or {}
+        comparison = context.get('comparison') or {}
+        evolution = context.get('evolution') or {}
+        evidence = context.get('evidence') or {}
+        return {
+            'latest_analysis_id': latest.id,
+            'metrics': {
+                key: {
+                    'current': m.get('current'),
+                    'baseline': m.get('baseline'),
+                    'deviation': m.get('deviation', m.get('delta')),
+                    'sample_size': m.get('sample_size'),
+                    'availability': m.get('availability'),
+                }
+                for key, m in baseline.items()
+            },
+            'historical_analysis_ids':
+                comparison.get('historical_analysis_ids') or [],
+            'window_days': comparison.get('window_days'),
+            'narratives': [
+                {
+                    'name': n.get('name') or n.get('normalized_name'),
+                    'state': n.get('state'),
+                    'current_occurrences': n.get('current_occurrences'),
+                    'prior_occurrences': n.get('prior_occurrences'),
+                    'recent_occurrences': n.get('recent_occurrences'),
+                    'first_seen_at': n.get('first_seen_at'),
+                    'last_seen_at': n.get('last_seen_at'),
+                }
+                for n in (evolution.get('narratives') or [])[:20]
+            ],
+            'evidence_links': len(evidence.get('links') or []),
+            'evidence_verified': evidence.get('verified_count'),
+        }
+
+    def _render_v13_html(self, v13):
+        """Bounded V13 report section; unavailable renders explicitly."""
+        import html as _html
+
+        def _esc(value):
+            return _html.escape(str(value)) if value is not None else 'Unavailable'
+
+        def _num(value):
+            return f'{float(value):.1f}' if value is not None else 'Unavailable'
+
+        if not v13:
+            return ('<h2>V13 Historical Context (heuristic)</h2>'
+                    '<p>Unavailable &mdash; no analysis available.</p>')
+        parts = ['<h2>V13 Historical Context (heuristic, non-causal)</h2>']
+        parts.append(f"<p>Latest analysis: {v13.get('latest_analysis_id', 'Unavailable')} &middot; "
+                     f"Window: {_esc(v13.get('window_days'))} days &middot; "
+                     f"Historical analyses: {len(v13.get('historical_analysis_ids') or [])}</p>")
+        metrics = v13.get('metrics') or {}
+        if metrics:
+            parts.append('<table><tr><th>Metric</th><th>Current</th><th>Historical</th>'
+                         '<th>Change</th><th>Sample</th><th>Status</th></tr>')
+            for key in sorted(metrics):
+                m = metrics[key]
+                parts.append(
+                    f"<tr><td>{_esc(m.get('metric', key))}</td>"
+                    f"<td>{_num(m.get('current'))}</td>"
+                    f"<td>{_num(m.get('baseline'))}</td>"
+                    f"<td>{_num(m.get('deviation'))}</td>"
+                    f"<td>{m.get('sample_size') if m.get('sample_size') is not None else 'Unavailable'}</td>"
+                    f"<td>{_esc(m.get('availability'))}</td></tr>")
+            parts.append('</table>')
+        narratives = v13.get('narratives') or []
+        if narratives:
+            parts.append('<h2>V13 Narrative Evolution (observed, non-causal)</h2>')
+            parts.append('<table><tr><th>Narrative</th><th>State</th><th>Current</th>'
+                         '<th>Prior</th><th>Recent</th><th>First Seen</th><th>Last Seen</th></tr>')
+            for n in narratives:
+                parts.append(
+                    f"<tr><td>{_esc(n.get('name'))}</td>"
+                    f"<td>{_esc(n.get('state'))}</td>"
+                    f"<td>{n.get('current_occurrences')}</td>"
+                    f"<td>{n.get('prior_occurrences')}</td>"
+                    f"<td>{n.get('recent_occurrences')}</td>"
+                    f"<td>{_esc(n.get('first_seen_at'))}</td>"
+                    f"<td>{_esc(n.get('last_seen_at'))}</td></tr>")
+            parts.append('</table>')
+        parts.append(f"<p>Evidence links: {v13.get('evidence_links', 'Unavailable')} "
+                     f"({v13.get('evidence_verified', 'Unavailable')} verified). "
+                     f"Associations are descriptive and do not prove causation.</p>")
+        return '\n'.join(parts)
+
     def _render_html(self, data):
+        v13_section = self._render_v13_html(data.get('v13_historical_context'))
         return f'''<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>SocialSense AI Report</title>
 <style>
@@ -229,6 +334,7 @@ th {{ color: #adb5bd; }}
 <tr><th>Avg Authenticity</th><td>{data.get('authenticity_intelligence', {}).get('avg_authenticity', 0)}</td></tr>
 <tr><th>Avg AI Probability</th><td>{data.get('authenticity_intelligence', {}).get('avg_ai_probability', 0)}</td></tr>
 </table>
+{v13_section}
 <p style="text-align:center;margin-top:2rem;color:#6c757d;">Generated by SocialSense AI v11.0</p>
 </body></html>'''
 
