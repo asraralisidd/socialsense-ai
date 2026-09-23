@@ -1115,6 +1115,138 @@ class AnalysisService:
             })
         return results
 
+    def delete_user_analysis(self, analysis_id, user_id):
+        """Self-service deletion of one user-owned analysis and its subtree.
+
+        Ownership is verified first via the repository (an unknown id or
+        another user's analysis yields not_found without revealing anything).
+        Analyses with a RUNNING or PENDING job are refused so no job is
+        left pointing at deleted data. Dependent rows are removed
+        leaf-first inside a single transaction; generated export files are
+        removed afterwards, scoped strictly inside UPLOAD_FOLDER, with
+        missing files tolerated idempotently.
+        """
+        from models.media_analysis import MediaAnalysis
+        from models.propagation_event import PropagationEvent
+        from models.threat_assessment import ThreatAssessment
+        from models.narrative_occurrence import NarrativeOccurrence
+        from models.coordination_signal import CoordinationSignal
+        from models.report_export import ReportExport
+        from models.job import Job
+        from models.job_log import JobLog
+        from models.transcript_segment import TranscriptSegment
+
+        analysis = self.analysis_repo.get_user_analysis_with_reddit(
+            analysis_id, user_id)
+        if not analysis:
+            return {'success': False, 'not_found': True,
+                    'error': 'Analysis not found.'}
+
+        active = Job.query.filter(
+            Job.result_analysis_id == analysis.id,
+            Job.user_id == user_id,
+            Job.status.in_([Job.PENDING, Job.RUNNING])).first()
+        if active is not None:
+            return {'success': False, 'blocked': True,
+                    'error': 'Analysis cannot be deleted while a related job '
+                             'is still running or pending. Cancel the job first.'}
+
+        export_paths = [
+            row.file_path for row in ReportExport.query.filter_by(
+                analysis_id=analysis.id).all()
+            if getattr(row, 'file_path', None)]
+
+        try:
+            aid = analysis.id
+            yt_ids = [r.id for r in YouTubeAnalysis.query.filter_by(
+                analysis_id=aid).all()]
+            tr_ids = [t.id for t in VideoTranscript.query.filter(
+                VideoTranscript.youtube_analysis_id.in_(yt_ids)).all()] \
+                if yt_ids else []
+            seg_ids = [s.id for s in TranscriptSegment.query.filter(
+                TranscriptSegment.transcript_id.in_(tr_ids)).all()] \
+                if tr_ids else []
+            cr_ids = [c.id for c in CommentResult.query.filter_by(
+                analysis_id=aid).all()]
+            ent_ids = [e.id for e in Entity.query.filter_by(
+                analysis_id=aid).all()]
+
+            def _del(model, criterion):
+                return model.query.filter(criterion).delete(
+                    synchronize_session=False)
+
+            if cr_ids:
+                _del(CommentContext, CommentContext.comment_result_id.in_(cr_ids))
+            if tr_ids:
+                _del(CommentContext, CommentContext.transcript_id.in_(tr_ids))
+            if seg_ids:
+                _del(CommentContext, CommentContext.best_segment_id.in_(seg_ids))
+            if ent_ids:
+                _del(EntityContext, EntityContext.entity_id.in_(ent_ids))
+                _del(EntityMention, EntityMention.entity_id.in_(ent_ids))
+            if cr_ids:
+                _del(EntityContext, EntityContext.comment_result_id.in_(cr_ids))
+                _del(EntityMention, EntityMention.comment_result_id.in_(cr_ids))
+            if seg_ids:
+                _del(TranscriptSegment,
+                     TranscriptSegment.transcript_id.in_(tr_ids))
+            if tr_ids:
+                _del(VideoTranscript,
+                     VideoTranscript.youtube_analysis_id.in_(yt_ids))
+            _del(PropagationEvent,
+                 (PropagationEvent.source_analysis_id == aid) |
+                 (PropagationEvent.target_analysis_id == aid))
+            for model in (ThreatAssessment, NarrativeOccurrence,
+                          CoordinationSignal, MediaAnalysis, ReportExport):
+                _del(model, model.analysis_id == aid)
+            _del(VideoContextHistory, VideoContextHistory.analysis_id == aid)
+            _del(EntityHistory, EntityHistory.analysis_id == aid)
+            if ent_ids:
+                _del(Entity, Entity.analysis_id == aid)
+            if cr_ids:
+                _del(CommentResult, CommentResult.analysis_id == aid)
+            _del(YouTubeAnalysis, YouTubeAnalysis.analysis_id == aid)
+            _del(RedditAnalysis, RedditAnalysis.analysis_id == aid)
+            for job in Job.query.filter_by(
+                    result_analysis_id=aid, user_id=user_id).all():
+                _del(JobLog, JobLog.job_id == job.id)
+                _del(Job, Job.id == job.id)
+            db.session.delete(analysis)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.warning(f'Analysis deletion failed: {exc}')
+            return {'success': False,
+                    'error': 'Analysis could not be deleted.'}
+
+        self._remove_export_files(export_paths)
+        return {'success': True}
+
+    @staticmethod
+    def _remove_export_files(paths):
+        """Delete generated files strictly inside UPLOAD_FOLDER.
+
+        Missing files are tolerated (idempotent); paths escaping the
+        upload folder are never touched.
+        """
+        import os
+        try:
+            base = os.path.realpath(
+                current_app.config.get('UPLOAD_FOLDER', 'reports'))
+        except Exception:
+            return
+        for path in paths or []:
+            try:
+                if not path or not isinstance(path, str):
+                    continue
+                real = os.path.realpath(path)
+                if os.path.commonpath([real, base]) != base:
+                    continue
+                if os.path.isfile(real):
+                    os.remove(real)
+            except Exception:
+                continue
+
     def _generate_transcript_summary(self, transcript_text):
         if not transcript_text:
             return None

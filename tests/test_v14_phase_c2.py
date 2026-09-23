@@ -101,7 +101,10 @@ class TestResetToken:
 
     def test_tampered_token(self, app, db, user):
         token = _token_for('test@example.com')
-        tampered = token[:-1] + ('A' if token[-1] != 'A' else 'B')
+        # Tamper a middle character: the final base64 quantum may contain
+        # padding bits where a flip does not alter the decoded signature.
+        mid = len(token) // 2
+        tampered = token[:mid] + ('A' if token[mid] != 'A' else 'B') + token[mid + 1:]
         found, reason = _svc().verify_reset_token(tampered)
         assert found is None and reason
 

@@ -101,6 +101,23 @@ def history():
     return render_template('analysis/history.html', analyses=analyses)
 
 
+@analysis_bp.route('/<int:analysis_id>/delete', methods=['POST'])
+@login_required
+def delete_analysis(analysis_id):
+    """Self-service deletion of one user-owned analysis.
+
+    POST-only with an explicit UI confirmation. Ownership is enforced in
+    the service layer; unknown or foreign ids behave exactly like a
+    missing analysis.
+    """
+    result = analysis_service.delete_user_analysis(analysis_id, current_user.id)
+    if result.get('success'):
+        flash('Analysis deleted.', 'success')
+    else:
+        flash(result.get('error', 'Analysis could not be deleted.'), 'danger')
+    return redirect(url_for('analysis.history'))
+
+
 @analysis_bp.route('/api/check-demo')
 def check_demo():
     from flask import current_app
