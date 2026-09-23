@@ -6,6 +6,28 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 auth_service = AuthService()
 
 
+def is_safe_url(target):
+    """Allow only local application paths for post-login redirects.
+
+    Rejects absolute URLs (scheme://host), protocol-relative URLs (//host),
+    backslash tricks, and non-string input to prevent open redirects.
+    """
+    if not target or not isinstance(target, str):
+        return False
+    target = target.strip()
+    if not target.startswith('/') or target.startswith('//'):
+        return False
+    if '\\' in target:
+        return False
+    return True
+
+
+def safe_redirect_target(target, fallback_endpoint='dashboard.index'):
+    if is_safe_url(target):
+        return target
+    return url_for(fallback_endpoint)
+
+
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
@@ -44,7 +66,7 @@ def login():
         if result['success']:
             flash('Welcome back!', 'success')
             next_page = request.args.get('next')
-            return redirect(next_page or url_for('dashboard.index'))
+            return redirect(safe_redirect_target(next_page))
         else:
             for field, error in result['errors'].items():
                 flash(error, 'danger')
