@@ -824,6 +824,211 @@
 </div>
 {% endif %}
 
+{# V13 Historical Context & Explainable Intelligence (backend-computed, read-only) #}
+{% if v13 and v13.baseline %}
+<div class="card border-info border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-clock-rotate-left me-2 text-info"></i>Historical Context</h6>
+        <span class="badge bg-secondary">heuristic baseline, last {{ v13.baseline.window_days }} days</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th class="text-end">Current</th>
+                        <th class="text-end">Historical</th>
+                        <th class="text-end">Change</th>
+                        <th class="text-end">Sample</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for key, m in v13.baseline.metrics.items() %}
+                    <tr>
+                        <td>{{ m.metric|replace('_', ' ')|title }}</td>
+                        <td class="text-end">{% if m.current is not none %}{{ '%.1f'|format(m.current) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end">{% if m.baseline is not none %}{{ '%.1f'|format(m.baseline) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end">{% if m.deviation is not none %}{{ '%+.1f'|format(m.deviation) }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                        <td class="text-end">{{ m.sample_size }}</td>
+                        <td>
+                            {% if m.availability == 'typical' %}<span class="badge bg-success">typical</span>
+                            {% elif m.availability in ('moderately_above_baseline', 'moderately_below_baseline') %}<span class="badge bg-warning text-dark">{{ m.availability }}</span>
+                            {% elif m.availability in ('substantially_above_baseline', 'substantially_below_baseline') %}<span class="badge bg-danger">{{ m.availability }}</span>
+                            {% elif m.availability == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>
+                            {% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0 px-3 pb-3">
+            <i class="fas fa-circle-info me-1"></i>
+            Baselines compare this analysis with prior analyses by the same user.
+            Unavailable values are ignored, never treated as zero. Deviations are
+            descriptive, not causal claims.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v13 and v13.comparison %}
+<div class="card border-info border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-code-compare me-2 text-info"></i>Cross-Analysis Comparison</h6>
+        <span class="badge bg-secondary">{{ v13.comparison.historical_analysis_ids|length }} prior analyses &middot; {{ v13.comparison.window_days }} days</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-dark table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th class="text-end">Current</th>
+                        <th class="text-end">Historical</th>
+                        <th class="text-end">Change</th>
+                        <th class="text-end">Sample</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for key, m in v13.comparison.metrics.items() %}
+                    <tr>
+                        <td>{{ m.metric|replace('_', ' ')|title }}</td>
+                        <td class="text-end">{% if m.current is not none %}{{ '%.1f'|format(m.current) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end">{% if m.baseline is not none %}{{ '%.1f'|format(m.baseline) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end">{% if m.delta is not none %}{{ '%+.1f'|format(m.delta) }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                        <td class="text-end">{{ m.sample_size }}</td>
+                        <td>
+                            {% if m.availability == 'typical' %}<span class="badge bg-success">typical</span>
+                            {% elif m.availability in ('moderately_above_baseline', 'moderately_below_baseline') %}<span class="badge bg-warning text-dark">{{ m.availability }}</span>
+                            {% elif m.availability in ('substantially_above_baseline', 'substantially_below_baseline') %}<span class="badge bg-danger">{{ m.availability }}</span>
+                            {% elif m.availability == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>
+                            {% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if v13.comparison.limitations %}
+        <ul class="small text-muted mt-2 mb-0 px-3 pb-1 ps-4">
+            {% for note in v13.comparison.limitations %}
+            <li>{{ note }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        <p class="small text-muted mt-1 mb-0 px-3 pb-3">
+            <i class="fas fa-circle-info me-1"></i>
+            {{ v13.comparison.disclaimer }}
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v13 and v13.evolution %}
+<div class="card border-info border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-arrow-trend-up me-2 text-info"></i>Narrative Evolution</h6>
+        <span class="badge bg-secondary">heuristic, observed occurrences</span>
+    </div>
+    <div class="card-body">
+        {% for n in v13.evolution.narratives %}
+        <div class="bg-dark rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <span class="fw-bold">{{ n.name or n.normalized_name }}</span>
+                {% if n.state == 'emerging' %}<span class="badge bg-info text-dark">emerging</span>
+                {% elif n.state == 'persistent' %}<span class="badge bg-primary">persistent</span>
+                {% elif n.state == 'reappearing' %}<span class="badge bg-warning text-dark">reappearing</span>
+                {% elif n.state == 'declining' %}<span class="badge bg-secondary">declining</span>
+                {% elif n.state == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>
+                {% else %}<span class="badge bg-dark border">Unavailable</span>{% endif %}
+            </div>
+            <div class="row g-2 mt-2">
+                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Current</small><span class="fw-bold">{{ n.current_occurrences }}</span></div></div>
+                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Prior</small><span class="fw-bold">{{ n.prior_occurrences }}</span></div></div>
+                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Recent</small><span class="fw-bold">{{ n.recent_occurrences }}</span></div></div>
+                {% if n.gap_days is not none %}
+                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Span (days)</small><span class="fw-bold">{{ n.gap_days }}</span></div></div>
+                {% endif %}
+            </div>
+            {% if n.first_seen_at or n.last_seen_at %}
+            <div class="small text-muted mt-2">
+                {% if n.first_seen_at %}<span>First seen: {{ n.first_seen_at[:10] }}</span>{% endif %}
+                {% if n.last_seen_at %}<span> &middot; Last seen: {{ n.last_seen_at[:10] }}</span>{% endif %}
+            </div>
+            {% endif %}
+            {% if n.unpositioned_occurrences %}
+            <div class="small text-muted mt-1">{{ n.unpositioned_occurrences }} occurrence(s) have no stored timestamp and were not placed in time.</div>
+            {% endif %}
+            {% if n.evidence_refs %}
+            <div class="small mt-1">
+                {% for ref in n.evidence_refs[:5] %}
+                <span class="badge bg-dark border me-1">{{ ref.ref }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if n.limitation %}
+            <div class="small text-muted mt-1">{{ n.limitation }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            Evolution states describe stored occurrence patterns only and do not imply
+            intent, coordination, or causality.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% if v13 and v13.evidence %}
+<div class="card border-info border-opacity-25 mb-4">
+    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-magnifying-glass me-2 text-info"></i>Why This Assessment?</h6>
+        <span class="badge bg-secondary">{{ v13.evidence.link_count }} evidence links &middot; {{ v13.evidence.verified_count }} verified</span>
+    </div>
+    <div class="card-body">
+        <div class="accordion" id="v13EvidenceAccordion">
+            {% for link in v13.evidence.links[:25] %}
+            <div class="accordion-item bg-dark text-light border-secondary">
+                <h2 class="accordion-header" id="v13ev-h{{ loop.index }}">
+                    <button class="accordion-button collapsed bg-dark text-light" type="button" data-bs-toggle="collapse" data-bs-target="#v13ev-c{{ loop.index }}" aria-expanded="false" aria-controls="v13ev-c{{ loop.index }}">
+                        <span class="badge bg-secondary me-2">{{ link.component }}</span>
+                        <span class="text-truncate">{{ link.claim }}</span>
+                        {% if link.verified %}<span class="badge bg-success ms-2">Verified</span>
+                        {% else %}<span class="badge bg-warning text-dark ms-2">Unverified</span>{% endif %}
+                    </button>
+                </h2>
+                <div id="v13ev-c{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="v13ev-h{{ loop.index }}" data-bs-parent="#v13EvidenceAccordion">
+                    <div class="accordion-body small">
+                        <div><span class="text-muted">Claim:</span> {{ link.claim }}</div>
+                        <div><span class="text-muted">Evidence type:</span> {{ link.evidence_type }}</div>
+                        <div><span class="text-muted">Source:</span> {{ link.source_table or 'unavailable' }}</div>
+                        <div><span class="text-muted">Reference:</span> {{ link.ref or 'unavailable' }}</div>
+                        {% if link.snippet %}<div><span class="text-muted">Snippet:</span> <q>{{ link.snippet }}</q></div>{% endif %}
+                        {% if link.score is not none %}<div><span class="text-muted">Score:</span> {{ link.score }}</div>{% endif %}
+                        <div><span class="text-muted">Verification state:</span>
+                            {% if link.verified %}Verified against stored records.
+                            {% else %}Could not be verified against stored records; shown for transparency, not as a confirmed record.{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="small text-muted mt-2 mb-0">
+            <i class="fas fa-circle-info me-1"></i>
+            Each link traces an assessment claim to the stored evidence behind it.
+            Unverified links are shown for transparency and must not be treated as
+            confirmed database records.
+        </p>
+    </div>
+</div>
+{% endif %}
+
 {% if data.entities %}
 <div class="card border-secondary bg-dark mb-4">
     <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">

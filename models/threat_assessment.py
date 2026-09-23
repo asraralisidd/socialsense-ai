@@ -103,6 +103,13 @@ class ThreatAssessment(db.Model):
     indicators = db.Column(_json_column(), nullable=True)
     limitations = db.Column(_json_column(), nullable=True)
 
+    # V13 evidence provenance: bounded list of
+    # ``{claim, component, source_table, source_id, ref, snippet, score,
+    # evidence_type}`` dicts linking each persisted claim to the actual
+    # stored row that produced it. NULL == chain not built (e.g. V13
+    # disabled or pre-V13 row), which is distinct from an empty list.
+    evidence_refs = db.Column(_json_column(), nullable=True)
+
     assessment_method = db.Column(db.String(40), nullable=False,
                                   default=METHOD_HEURISTIC_WEIGHTED)
 
@@ -163,6 +170,7 @@ class ThreatAssessment(db.Model):
             'reasons': _as_list(self.reasons),
             'indicators': _as_list(self.indicators),
             'limitations': _as_list(self.limitations),
+            'evidence_refs': _as_list(self.evidence_refs),
             'assessment_method': self.assessment_method,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,

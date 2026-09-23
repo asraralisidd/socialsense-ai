@@ -44,6 +44,7 @@ from services.coordination_intelligence_service import CoordinationIntelligenceS
 from services.propagation_intelligence_service import PropagationIntelligenceService
 from services.temporal_intelligence_service import TemporalIntelligenceService
 from services.threat_assessment_service import ThreatAssessmentService
+from services.v13_evidence_chain_service import V13EvidenceChainService
 
 
 class AnalysisService:
@@ -75,6 +76,7 @@ class AnalysisService:
         self.propagation_service = PropagationIntelligenceService()
         self.temporal_service = TemporalIntelligenceService()
         self.threat_service = ThreatAssessmentService()
+        self.evidence_chain_service = V13EvidenceChainService()
 
     def create_youtube_analysis(self, user_id, video_url, comment_limit=100, progress_callback=None):
         video_id = self.youtube_service.extract_video_id(video_url)
@@ -391,6 +393,15 @@ class AnalysisService:
                 db.session.rollback()
                 current_app.logger.warning(f'Threat assessment failed: {e}')
 
+        self._notify_progress(progress_callback, 98, 'V13 Evidence Chain')
+        if current_app.config.get('ENABLE_V13_EVIDENCE_CHAIN', True):
+            try:
+                v12_components['v13_evidence'] = self.evidence_chain_service.analyze(
+                    analysis, components=v12_components)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'V13 evidence chain failed: {e}')
+
         return {
             'success': True,
             'analysis_id': analysis.id,
@@ -630,6 +641,15 @@ class AnalysisService:
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.warning(f'Threat assessment failed: {e}')
+
+        self._notify_progress(progress_callback, 98, 'V13 Evidence Chain')
+        if current_app.config.get('ENABLE_V13_EVIDENCE_CHAIN', True):
+            try:
+                v12_components['v13_evidence'] = self.evidence_chain_service.analyze(
+                    analysis, components=v12_components)
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.warning(f'V13 evidence chain failed: {e}')
 
         return {
             'success': True,
