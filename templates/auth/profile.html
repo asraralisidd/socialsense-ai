@@ -93,6 +93,31 @@
                 </form>
             </div>
         </div>
+
+        <div class="card border-danger mt-4">
+            <div class="card-header bg-dark border-danger">
+                <h5 class="mb-0 text-danger"><i class="fas fa-triangle-exclamation me-2"></i>Danger Zone</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Permanently delete your account and <strong>all</strong> associated data,
+                including analyses, jobs, reports, notifications, and history. This cannot be undone.</p>
+                <form method="post" action="{{ url_for('auth.account_delete') }}"
+                      onsubmit="return confirm('Permanently delete your account and ALL associated data? This cannot be undone.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="del_current_password" class="form-label">Current password</label>
+                        <input type="password" class="form-control bg-dark text-light border-secondary"
+                               id="del_current_password" name="current_password" required autocomplete="current-password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="username_confirm" class="form-label">Type your username ({{ data.username }}) to confirm</label>
+                        <input type="text" class="form-control bg-dark text-light border-secondary"
+                               id="username_confirm" name="username_confirm" required autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn btn-danger">Delete my account permanently</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

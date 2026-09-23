@@ -112,6 +112,28 @@ def profile():
     return render_template('auth/profile.html', data=data)
 
 
+@auth_bp.route('/account/delete', methods=['POST'])
+@login_required
+def account_delete():
+    """Self-service account deletion for the current user only.
+
+    No target user is accepted from input. Requires current password
+    plus exact typed-username confirmation. Success logs out and
+    redirects to the public index.
+    """
+    result = auth_service.delete_account(
+        current_user,
+        request.form.get('current_password', ''),
+        request.form.get('username_confirm', ''),
+    )
+    if result['success']:
+        flash('Your account and all associated data have been deleted.', 'info')
+        return redirect(url_for('index'))
+    for error in result['errors'].values():
+        flash(error, 'danger')
+    return redirect(url_for('auth.profile'))
+
+
 @auth_bp.route('/password/forgot', methods=['GET', 'POST'])
 def password_forgot():
     """Start account recovery. Never reveals whether the email exists.

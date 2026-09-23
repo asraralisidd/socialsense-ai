@@ -202,6 +202,11 @@ class TestResetFlow:
         assert 'pbkdf2' not in body
 
     def test_production_hides_token(self, app, db, user):
+        from services.redis_service import RedisService
+        try:
+            RedisService().delete('password_reset:test@example.com')
+        except Exception:
+            pass
         app.config['TESTING'] = False
         try:
             out = AuthService().request_password_reset('test@example.com')

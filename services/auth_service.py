@@ -133,6 +133,201 @@ class AuthService:
     def logout(self):
         logout_user()
 
+    def delete_account(self, user, current_password, username_confirm):
+        """Self-service hard deletion of the authenticated user's account.
+
+        Safeguards (all must pass before any mutation):
+        current password verified, typed username exactly matches,
+        sole-admin deletion refused. Active jobs are cancelled/failed via
+        existing job conventions. All user-owned rows across the 14
+        user-linked tables plus every analysis subtree are purged
+        leaf-first in a single transaction; generated files strictly
+        inside UPLOAD_FOLDER are removed afterwards. Ends with logout.
+
+        Narrative rows are user-owned (``narratives.user_id``); no
+        shared/global aggregates exist, so nothing is preserved.
+        """
+        from database import db
+
+        if user is None or getattr(user, 'id', None) is None:
+            return {'success': False,
+                    'errors': {'general': 'Authentication required.'}}
+
+        if not current_password or not check_password_hash(
+                user.password_hash, current_password):
+            return {'success': False,
+                    'errors': {'current_password': 'Current password is incorrect.'}}
+
+        if not username_confirm or username_confirm != user.username:
+            return {'success': False,
+                    'errors': {'username': 'Typed username does not match your account.'}}
+
+        if user.is_admin:
+            from models.user import User as _User
+            other_admins = _User.query.filter(
+                _User.role == _User.ROLE_ADMIN,
+                _User.id != user.id).count()
+            if other_admins == 0:
+                return {'success': False,
+                        'errors': {'general': (
+                            'This account is the only remaining admin and '
+                            'cannot be deleted. Promote another admin first.')}}
+
+        from repositories.job_repository import JobRepository
+        from models.job import Job
+        job_repo = JobRepository()
+        uid = user.id
+        try:
+            for job in Job.query.filter_by(user_id=uid).all():
+                if job.status == Job.PENDING:
+                    job_repo.mark_cancelled(job.id)
+                elif job.status == Job.RUNNING:
+                    job.cancellation_requested = True
+                    job_repo.mark_failed(
+                        job.id, 'Account deleted; job terminated.')
+            db.session.flush()
+        except Exception as exc:
+            db.session.rollback()
+            logger.warning(f'Account deletion job handling failed: {exc}')
+            return {'success': False,
+                    'errors': {'general': 'Account could not be deleted.'}}
+
+        file_paths = self._account_file_paths(uid)
+
+        try:
+            self._purge_user_data(uid)
+            fresh = self.user_repo.get_by_id(uid)
+            if fresh is None:
+                raise RuntimeError('account row missing before final delete')
+            db.session.delete(fresh)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            logger.warning(f'Account deletion failed: {exc}')
+            return {'success': False,
+                    'errors': {'general': 'Account could not be deleted.'}}
+
+        from services.analysis_service import AnalysisService
+        AnalysisService._remove_export_files(file_paths)
+        logger.warning(f'Account deleted: user_id={uid}')
+        logout_user()
+        return {'success': True, 'errors': {}}
+
+    @staticmethod
+    def _account_file_paths(uid):
+        """Generated file paths owned by the account (DB read only)."""
+        from models.analysis import Analysis
+        from models.report_export import ReportExport
+        from models.scheduled_report import ScheduledReport
+        paths = []
+        try:
+            aids = [a.id for a in Analysis.query.filter_by(user_id=uid).all()]
+            if aids:
+                paths.extend(
+                    row.file_path for row in ReportExport.query.filter(
+                        ReportExport.analysis_id.in_(aids)).all()
+                    if getattr(row, 'file_path', None))
+            paths.extend(
+                row.last_file_path for row in ScheduledReport.query.filter_by(
+                    user_id=uid).all()
+                if getattr(row, 'last_file_path', None))
+        except Exception as exc:
+            logger.warning(f'Account file inventory failed: {exc}')
+        return paths
+
+    @staticmethod
+    def _purge_user_data(uid):
+        """Leaf-first purge of every user-owned row (same order as C3)."""
+        from database import db
+        from models.analysis import Analysis, YouTubeAnalysis
+        from models.reddit_analysis import RedditAnalysis
+        from models.comment_result import CommentResult
+        from models.comment_context import CommentContext
+        from models.entity import Entity
+        from models.entity_context import EntityContext
+        from models.entity_mention import EntityMention
+        from models.entity_history import EntityHistory
+        from models.media_analysis import MediaAnalysis
+        from models.propagation_event import PropagationEvent
+        from models.threat_assessment import ThreatAssessment
+        from models.narrative import Narrative
+        from models.narrative_occurrence import NarrativeOccurrence
+        from models.coordination_signal import CoordinationSignal
+        from models.report_export import ReportExport
+        from models.job import Job
+        from models.job_log import JobLog
+        from models.video_transcript import VideoTranscript
+        from models.transcript_segment import TranscriptSegment
+        from models.video_context_history import VideoContextHistory
+        from models.channel_context import ChannelContext
+        from models.activity_log import ActivityLog
+        from models.notification import Notification
+        from models.scheduled_analysis import ScheduledAnalysis
+        from models.scheduled_report import ScheduledReport
+
+        def _del(model, criterion):
+            return model.query.filter(criterion).delete(
+                synchronize_session=False)
+
+        aids = [a.id for a in Analysis.query.filter_by(user_id=uid).all()]
+        for aid in aids:
+            yt_ids = [r.id for r in YouTubeAnalysis.query.filter_by(
+                analysis_id=aid).all()]
+            tr_ids = [t.id for t in VideoTranscript.query.filter(
+                VideoTranscript.youtube_analysis_id.in_(yt_ids)).all()] \
+                if yt_ids else []
+            seg_ids = [s.id for s in TranscriptSegment.query.filter(
+                TranscriptSegment.transcript_id.in_(tr_ids)).all()] \
+                if tr_ids else []
+            cr_ids = [c.id for c in CommentResult.query.filter_by(
+                analysis_id=aid).all()]
+            ent_ids = [e.id for e in Entity.query.filter_by(
+                analysis_id=aid).all()]
+            if cr_ids:
+                _del(CommentContext, CommentContext.comment_result_id.in_(cr_ids))
+            if tr_ids:
+                _del(CommentContext, CommentContext.transcript_id.in_(tr_ids))
+            if seg_ids:
+                _del(CommentContext, CommentContext.best_segment_id.in_(seg_ids))
+            if ent_ids:
+                _del(EntityContext, EntityContext.entity_id.in_(ent_ids))
+                _del(EntityMention, EntityMention.entity_id.in_(ent_ids))
+            if cr_ids:
+                _del(EntityContext, EntityContext.comment_result_id.in_(cr_ids))
+                _del(EntityMention, EntityMention.comment_result_id.in_(cr_ids))
+            if seg_ids:
+                _del(TranscriptSegment,
+                     TranscriptSegment.transcript_id.in_(tr_ids))
+            if tr_ids:
+                _del(VideoTranscript,
+                     VideoTranscript.youtube_analysis_id.in_(yt_ids))
+            _del(PropagationEvent,
+                 (PropagationEvent.source_analysis_id == aid) |
+                 (PropagationEvent.target_analysis_id == aid))
+            for model in (ThreatAssessment, NarrativeOccurrence,
+                          CoordinationSignal, MediaAnalysis, ReportExport):
+                _del(model, model.analysis_id == aid)
+            _del(VideoContextHistory, VideoContextHistory.analysis_id == aid)
+            _del(EntityHistory, EntityHistory.analysis_id == aid)
+            if ent_ids:
+                _del(Entity, Entity.analysis_id == aid)
+            if cr_ids:
+                _del(CommentResult, CommentResult.analysis_id == aid)
+            _del(YouTubeAnalysis, YouTubeAnalysis.analysis_id == aid)
+            _del(RedditAnalysis, RedditAnalysis.analysis_id == aid)
+            _del(Analysis, Analysis.id == aid)
+
+        # User-level rows (analyses already gone).
+        for model in (ActivityLog, Notification, ScheduledAnalysis,
+                      ScheduledReport, ChannelContext, EntityHistory,
+                      VideoContextHistory, Narrative, NarrativeOccurrence,
+                      CoordinationSignal, PropagationEvent, ThreatAssessment):
+            _del(model, model.user_id == uid)
+        remaining_jobs = Job.query.filter_by(user_id=uid).all()
+        for job in remaining_jobs:
+            _del(JobLog, JobLog.job_id == job.id)
+            _del(Job, Job.id == job.id)
+
     # ------------------------------------------------ password reset (C2)
 
     def _reset_signer(self):
