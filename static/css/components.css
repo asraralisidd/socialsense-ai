@@ -202,6 +202,82 @@
   color: var(--ss-text-subtle);
 }
 
+/* Shell / Layout */
+.ss-shell {
+  max-width: 1280px;
+}
+
+.ss-navbar {
+  background-color: var(--ss-surface);
+  border-bottom: 1px solid var(--ss-border);
+}
+
+.ss-navbar .navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ss-brand-icon {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ss-surface-raised);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-md);
+  color: var(--ss-primary);
+}
+
+.ss-brand-accent { color: var(--ss-primary); }
+
+.ss-icon-btn {
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--ss-radius-md);
+}
+
+.ss-icon-btn:hover {
+  background-color: var(--ss-surface-raised);
+}
+
+.ss-page-header {
+  padding: var(--ss-space-4) 0 var(--ss-space-3);
+  border-bottom: 1px solid var(--ss-border);
+  margin-bottom: var(--ss-space-5);
+}
+
+.ss-page-header__title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--ss-text);
+}
+
+.ss-page-header__subtitle {
+  font-size: var(--ss-text-sm);
+  color: var(--ss-text-muted);
+  margin-top: var(--ss-space-1);
+}
+
+.ss-breadcrumb .breadcrumb {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: var(--ss-text-sm);
+}
+
+.ss-breadcrumb .breadcrumb-item a {
+  color: var(--ss-text-muted);
+  text-decoration: none;
+}
+
+.ss-breadcrumb .breadcrumb-item a:hover { color: var(--ss-text); }
+
+.ss-breadcrumb .breadcrumb-item.active { color: var(--ss-text); }
+
+.ss-footer {
+  background-color: var(--ss-surface);
+  border-top: 1px solid var(--ss-border);
+}
+
 /* Navigation active state helper (used by later phases) */
 .navbar-nav .nav-link.active {
   color: var(--ss-text) !important;
@@ -215,6 +291,14 @@
   height: 2px;
   background-color: var(--ss-primary);
   border-radius: var(--ss-radius-pill);
+}
+
+@media (max-width: 991.98px) {
+  .navbar-nav .nav-link.active::after { display: none; }
+  .navbar-nav .nav-link.active {
+    background-color: var(--ss-surface-raised);
+    border-radius: var(--ss-radius-md);
+  }
 }
 
 /* Accessibility — visible focus */
