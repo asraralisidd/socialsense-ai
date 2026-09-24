@@ -19,6 +19,7 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+    <a href="#main-content" class="visually-hidden-focusable ss-skip-link">Skip to main content</a>
     <nav class="navbar navbar-expand-lg ss-navbar sticky-top" aria-label="Primary">
         <div class="container ss-shell">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}" aria-label="SocialSense AI home">
@@ -115,7 +116,7 @@
     </div>
     {% endif %}
 
-    <div class="container ss-shell mt-4">
+    <main id="main-content" class="container ss-shell mt-4" tabindex="-1">
         {% block page_header %}{% endblock %}
         {% block breadcrumbs %}
         {% if breadcrumbs is defined and breadcrumbs %}
@@ -144,7 +145,7 @@
         {% endwith %}
 
         {% block content %}{% endblock %}
-    </div>
+    </main>
 
     <footer class="footer ss-footer mt-5 py-4">
         <div class="container ss-shell text-center">

@@ -230,8 +230,22 @@
 
 .ss-icon-btn {
   width: 36px; height: 36px;
+  min-width: 36px; min-height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--ss-radius-md);
+}
+
+.ss-skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1080;
+  padding: 8px 12px;
+  background-color: var(--ss-surface-raised);
+  color: var(--ss-text);
+  border: 1px solid var(--ss-border);
+  border-radius: var(--ss-radius-md);
+  text-decoration: none;
 }
 
 .ss-icon-btn:hover {
@@ -315,6 +329,42 @@
 .form-control:focus, .form-select:focus {
   border-color: var(--ss-primary);
   box-shadow: var(--ss-focus-ring);
+}
+
+/* Responsive overflow guards */
+.table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+
+.text-truncate {
+  overflow-wrap: anywhere;
+}
+
+.ss-card .table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Ensure sticky section nav does not hide focused headings */
+section[id] {
+  scroll-margin-top: 80px;
+}
+
+main:focus {
+  outline: none;
+}
+
+/* Touch targets — comfortably tappable on mobile */
+.btn-sm, .page-link, .ss-icon-btn {
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.pagination .page-link {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Respect reduced motion */
