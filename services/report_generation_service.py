@@ -102,23 +102,43 @@ class ReportGenerationService:
         return report_data
 
     def _get_entity_report_data(self, user_id):
+        """Lifetime entity totals computed with SQL aggregates.
+
+        Matches the legacy Python rollup exactly (frequency sums per type,
+        risk mean over stored rows with NULL coerced to 0.0) without
+        materializing every entity/context row.
+        """
+        from sqlalchemy import func
         from models.entity import Entity
         from models.analysis import Analysis
-        entities = Entity.query.join(Analysis).filter(Analysis.user_id == user_id).all()
-        type_dist = {}
-        total_risk = 0.0
-        risk_count = 0
-        for e in entities:
-            type_dist[e.entity_type] = type_dist.get(e.entity_type, 0) + e.frequency
         from models.entity_context import EntityContext
-        ecs = EntityContext.query.join(Entity).join(Analysis).filter(Analysis.user_id == user_id).all()
-        for ec in ecs:
-            total_risk += ec.entity_risk_score or 0.0
-            risk_count += 1
+        type_rows = db.session.query(
+            Entity.entity_type,
+            func.sum(Entity.frequency),
+            func.count(Entity.id),
+        ).join(Analysis,
+               Entity.analysis_id == Analysis.id
+               ).filter(Analysis.user_id == user_id
+                        ).group_by(Entity.entity_type).all()
+        type_dist = {}
+        total_entities = 0
+        for entity_type, frequency, count in type_rows:
+            type_dist[entity_type] = type_dist.get(entity_type, 0) + (frequency or 0)
+            total_entities += count or 0
+        risk_row = db.session.query(
+            func.count(EntityContext.id),
+            func.avg(func.coalesce(EntityContext.entity_risk_score, 0.0)),
+        ).join(Entity,
+               EntityContext.entity_id == Entity.id
+               ).join(Analysis,
+                      Entity.analysis_id == Analysis.id
+                      ).filter(Analysis.user_id == user_id).first()
+        risk_count = risk_row[0] or 0 if risk_row else 0
+        avg_risk = (risk_row[1] or 0.0) if risk_row else 0.0
         return {
-            'total_entities': len(entities),
+            'total_entities': total_entities,
             'entity_type_distribution': type_dist,
-            'avg_entity_risk': round(total_risk / max(risk_count, 1), 1),
+            'avg_entity_risk': round(avg_risk, 1),
         }
 
     def _get_channel_report_data(self, user_id):
@@ -162,24 +182,35 @@ class ReportGenerationService:
         }
 
     def _get_authenticity_report_data(self, user_id):
+        """Lifetime authenticity totals computed with SQL aggregates.
+
+        Matches the legacy Python rollup exactly (60.0 thresholds,
+        ``or 0.0`` coercion, mean over stored rows) without materializing
+        every media row.
+        """
+        from sqlalchemy import func, case
         from models.analysis import Analysis
         from models.media_analysis import MediaAnalysis
-        media_rows = MediaAnalysis.query.join(Analysis).filter(Analysis.user_id == user_id).all()
-        total = len(media_rows)
-        ai_videos = sum(1 for m in media_rows if (m.overall_ai_probability or 0.0) >= 60.0)
-        authentic_videos = sum(1 for m in media_rows if (m.overall_authenticity_score or 0.0) >= 60.0)
-        deepfake_count = sum(1 for m in media_rows if (m.deepfake_score or 0.0) >= 60.0)
-        voice_clone_count = sum(1 for m in media_rows if (m.synthetic_voice_score or 0.0) >= 60.0)
-        avg_authenticity = sum(m.overall_authenticity_score or 0.0 for m in media_rows) / max(total, 1)
-        avg_ai = sum(m.overall_ai_probability or 0.0 for m in media_rows) / max(total, 1)
+        row = db.session.query(
+            func.count(MediaAnalysis.id),
+            func.sum(case((func.coalesce(MediaAnalysis.overall_ai_probability, 0.0) >= 60.0, 1), else_=0)),
+            func.sum(case((func.coalesce(MediaAnalysis.overall_authenticity_score, 0.0) >= 60.0, 1), else_=0)),
+            func.sum(case((func.coalesce(MediaAnalysis.deepfake_score, 0.0) >= 60.0, 1), else_=0)),
+            func.sum(case((func.coalesce(MediaAnalysis.synthetic_voice_score, 0.0) >= 60.0, 1), else_=0)),
+            func.avg(func.coalesce(MediaAnalysis.overall_authenticity_score, 0.0)),
+            func.avg(func.coalesce(MediaAnalysis.overall_ai_probability, 0.0)),
+        ).join(Analysis,
+               MediaAnalysis.analysis_id == Analysis.id
+               ).filter(Analysis.user_id == user_id).first()
+        total = row[0] or 0
         return {
             'total_media_analyzed': total,
-            'ai_videos': ai_videos,
-            'authentic_videos': authentic_videos,
-            'deepfake_count': deepfake_count,
-            'voice_clone_count': voice_clone_count,
-            'avg_authenticity': round(avg_authenticity, 1),
-            'avg_ai_probability': round(avg_ai, 1),
+            'ai_videos': row[1] or 0,
+            'authentic_videos': row[2] or 0,
+            'deepfake_count': row[3] or 0,
+            'voice_clone_count': row[4] or 0,
+            'avg_authenticity': round(row[5] or 0.0, 1),
+            'avg_ai_probability': round(row[6] or 0.0, 1),
         }
 
     def _get_v13_report_data(self, user_id):
@@ -338,8 +369,24 @@ th {{ color: #adb5bd; }}
 <p style="text-align:center;margin-top:2rem;color:#6c757d;">Generated by SocialSense AI v11.0</p>
 </body></html>'''
 
-    def process_due_reports(self, app):
-        due = self.report_repo.get_due_reports()
+    def process_due_reports(self, app, batch_size=None):
+        """Generate due reports in oldest-due-first bounded batches.
+
+        ``batch_size`` defaults to REPORT_MAX_DUE_BATCH. Processed reports
+        get ``next_run_at`` moved forward by ``update_next_run``, so any
+        remainder stays due and is picked up by the next scheduler cycle
+        rather than being silently discarded.
+        """
+        if batch_size is None:
+            try:
+                batch_size = int(app.config.get('REPORT_MAX_DUE_BATCH', 20))
+            except (TypeError, ValueError, AttributeError):
+                batch_size = 20
+        try:
+            batch_size = max(1, int(batch_size))
+        except (TypeError, ValueError):
+            batch_size = 20
+        due = self.report_repo.get_due_reports(limit=batch_size)
         count = 0
         for report in due:
             self.generate_report(report.id, app)

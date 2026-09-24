@@ -18,11 +18,27 @@ class ScheduledReportRepository(BaseRepository):
             q = q.filter_by(is_active=True)
         return q.order_by(ScheduledReport.next_run_at.asc()).all()
 
-    def get_due_reports(self):
-        return self.model.query.filter(
+    def get_due_reports(self, limit=None):
+        """Due reports oldest-first, with an optional SQL-level batch cap.
+
+        ``limit=None`` preserves the legacy unbounded read; callers that
+        process reports in a scheduler tick must pass an explicit bound so
+        remaining reports stay due for the next cycle instead of piling
+        into one tick.
+        """
+        query = self.model.query.filter(
             ScheduledReport.is_active == True,
             ScheduledReport.next_run_at <= _now(),
-        ).all()
+        ).order_by(ScheduledReport.next_run_at.asc(),
+                   ScheduledReport.id.asc())
+        if limit is not None:
+            try:
+                limit = max(1, int(limit))
+            except (TypeError, ValueError):
+                limit = None
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def update_next_run(self, report_id):
         report = self.get_by_id(report_id)
