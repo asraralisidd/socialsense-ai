@@ -68,9 +68,13 @@ class ScheduledReportRepository(BaseRepository):
         db.session.commit()
         return report
 
-    def delete_old_reports(self, days=30):
+    def delete_old_reports(self, days=30, limit=500):
         cutoff = _now() - timedelta(days=days)
-        old = self.model.query.filter(ScheduledReport.created_at < cutoff).all()
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 500
+        old = self.model.query.filter(ScheduledReport.created_at < cutoff).order_by(ScheduledReport.created_at.asc(), ScheduledReport.id.asc()).limit(limit).all()
         for r in old:
             db.session.delete(r)
         db.session.commit()

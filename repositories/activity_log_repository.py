@@ -35,9 +35,13 @@ class ActivityLogRepository(BaseRepository):
     def count_user_activity(self, user_id):
         return self.model.query.filter_by(user_id=user_id).count()
 
-    def delete_old_logs(self, days=30):
+    def delete_old_logs(self, days=30, limit=500):
         cutoff = _now() - timedelta(days=days)
-        old = self.model.query.filter(ActivityLog.created_at < cutoff).all()
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 500
+        old = self.model.query.filter(ActivityLog.created_at < cutoff).order_by(ActivityLog.created_at.asc(), ActivityLog.id.asc()).limit(limit).all()
         for l in old:
             db.session.delete(l)
         db.session.commit()

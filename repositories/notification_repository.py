@@ -51,10 +51,14 @@ class NotificationRepository(BaseRepository):
         db.session.commit()
         return n
 
-    def delete_old_notifications(self, days=30):
+    def delete_old_notifications(self, days=30, limit=500):
         from datetime import datetime, timezone, timedelta
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-        old = self.model.query.filter(Notification.created_at < cutoff).all()
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 500
+        old = self.model.query.filter(Notification.created_at < cutoff).order_by(Notification.created_at.asc(), Notification.id.asc()).limit(limit).all()
         for n in old:
             db.session.delete(n)
         db.session.commit()

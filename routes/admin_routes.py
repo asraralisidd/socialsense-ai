@@ -60,10 +60,9 @@ def maintenance():
         results = maintenance_service.cleanup_all(current_app._get_current_object())
         flash(f'Cleanup complete: {results}', 'success')
         return redirect(url_for('admin.maintenance'))
-    from models.job import Job
     job_repo = JobRepository()
-    stuck = job_repo.get_stuck_jobs()
-    return render_template('admin/maintenance.html', stuck_count=len(stuck))
+    stuck_count = job_repo.count_stuck_jobs()
+    return render_template('admin/maintenance.html', stuck_count=stuck_count)
 
 
 @admin_bp.route('/mark-stale-failed', methods=['POST'])

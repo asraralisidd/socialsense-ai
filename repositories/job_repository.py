@@ -110,19 +110,57 @@ class JobRepository(BaseRepository):
     def count_all_by_status(self, status):
         return self.model.query.filter_by(status=status).count()
 
-    def get_stuck_jobs(self):
+    def get_stuck_jobs(self, max_age_seconds=None, limit=100):
+        """Jobs considered stuck: running/pending with age beyond threshold.
+
+        Threshold defaults to twice MAX_JOB_RUNTIME (or 3600s) so normal
+        running jobs are not flagged during a healthy run; only jobs
+        whose ``started_at`` is older than the cutoff are returned.
+        Ordered oldest-first so recovery processes the most overdue first.
+        """
+        try:
+            if max_age_seconds is None:
+                from flask import current_app
+                max_age_seconds = int(current_app.config.get('MAX_JOB_RUNTIME', 600)) * 2 if current_app else 3600
+            max_age_seconds = max(60, int(max_age_seconds))
+        except (TypeError, ValueError, AttributeError):
+            max_age_seconds = 3600
+        cutoff = _utcnow() - timedelta(seconds=max_age_seconds)
+        try:
+            limit = max(1, min(int(limit), 500))
+        except (TypeError, ValueError):
+            limit = 100
         return self.model.query.filter(
             Job.status.in_([Job.RUNNING, Job.PENDING]),
             Job.started_at.isnot(None),
-            Job.started_at < _utcnow()
-        ).all()
+            Job.started_at < cutoff
+        ).order_by(Job.started_at.asc(), Job.id.asc()).limit(limit).all()
 
-    def cleanup_old_jobs(self, days=30):
+    def count_stuck_jobs(self, max_age_seconds=None):
+        try:
+            if max_age_seconds is None:
+                from flask import current_app
+                max_age_seconds = int(current_app.config.get('MAX_JOB_RUNTIME', 600)) * 2 if current_app else 3600
+            max_age_seconds = max(60, int(max_age_seconds))
+        except (TypeError, ValueError, AttributeError):
+            max_age_seconds = 3600
+        cutoff = _utcnow() - timedelta(seconds=max_age_seconds)
+        return self.model.query.filter(
+            Job.status.in_([Job.RUNNING, Job.PENDING]),
+            Job.started_at.isnot(None),
+            Job.started_at < cutoff
+        ).count()
+
+    def cleanup_old_jobs(self, days=30, limit=500):
         cutoff = _utcnow() - timedelta(days=days)
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 500
         old = self.model.query.filter(
             Job.created_at < cutoff,
             Job.status.in_([Job.COMPLETED, Job.FAILED, Job.CANCELLED, Job.TIMEOUT])
-        ).all()
+        ).order_by(Job.created_at.asc(), Job.id.asc()).limit(limit).all()
         for j in old:
             db.session.delete(j)
         db.session.commit()
