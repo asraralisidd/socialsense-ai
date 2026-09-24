@@ -1,1005 +1,415 @@
 {% extends "base.html" %}
 {% block title %}Analysis Results - SocialSense AI{% endblock %}
 
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <div>
-        <h3 class="fw-bold mb-1">
-            <i class="fas fa-file-alt me-2 text-primary"></i>Analysis Results
-        </h3>
-        {% if data.analysis.analysis_type == 'reddit' and data.reddit %}
-        <small class="text-muted">
-            <i class="fab fa-reddit text-orange me-1"></i>
-            {{ data.reddit.post_title }} &mdash;
-            <span class="text-muted">r/{{ data.reddit.subreddit }}</span>
-        </small>
-        {% elif data.youtube %}
-        <small class="text-muted">
-            <i class="fab fa-youtube text-danger me-1"></i>
-            {{ data.youtube.video_title }} &mdash;
-            <span class="text-muted">{{ data.youtube.channel_name }}</span>
-        </small>
-        {% endif %}
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{{ url_for('analysis.new') }}" class="btn btn-outline-primary">
-            <i class="fas fa-plus"></i>
-        </a>
-        <div class="btn-group">
-            <a href="{{ url_for('export.csv_download', analysis_id=data.analysis.id) }}"
-               class="btn btn-success">
-                <i class="fas fa-file-csv me-1"></i>CSV
-            </a>
-            <a href="{{ url_for('export.json_download', analysis_id=data.analysis.id) }}"
-               class="btn btn-info">
-                <i class="fas fa-file-code me-1"></i>JSON
-            </a>
-            <a href="{{ url_for('export.xlsx_download', analysis_id=data.analysis.id) }}"
-               class="btn btn-success">
-                <i class="fas fa-file-excel me-1"></i>XLSX
-            </a>
-            <a href="{{ url_for('export.pdf_download', analysis_id=data.analysis.id) }}"
-               class="btn btn-danger">
-                <i class="fas fa-file-pdf me-1"></i>PDF
-            </a>
-            <a href="{{ url_for('export.docx_download', analysis_id=data.analysis.id) }}"
-               class="btn btn-primary">
-                <i class="fas fa-file-word me-1"></i>DOCX
-            </a>
+{% block page_header %}
+<div class="ss-page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                {% if data.analysis.analysis_type == 'reddit' %}
+                <span class="badge bg-secondary"><i class="fab fa-reddit me-1"></i>Reddit</span>
+                {% else %}
+                <span class="badge bg-secondary"><i class="fab fa-youtube me-1 text-danger"></i>YouTube</span>
+                {% endif %}
+                {% if data.is_demo %}<span class="badge bg-warning text-dark">Demo</span>{% else %}<span class="badge bg-info">Live</span>{% endif %}
+                <small class="text-muted">ID {{ data.analysis.id }} · {{ data.analysis.created_at.strftime('%Y-%m-%d %H:%M') if data.analysis.created_at else '' }}</small>
+            </div>
+            <h1 class="ss-page-header__title">
+                {% if data.analysis.analysis_type == 'reddit' and data.reddit %}
+                    {{ data.reddit.post_title|truncate(80) }}
+                {% elif data.youtube %}
+                    {{ data.youtube.video_title|truncate(80) }}
+                {% else %}
+                    Analysis Results
+                {% endif %}
+            </h1>
+            <p class="ss-page-header__subtitle">
+                {% if data.analysis.analysis_type == 'reddit' and data.reddit %}
+                    r/{{ data.reddit.subreddit }} · {{ data.reddit.post_author or 'unknown' }} · {{ data.comment_count }} comments
+                {% elif data.youtube %}
+                    {{ data.youtube.channel_name }} · {{ data.comment_count }} comments · {{ data.youtube.view_count or 0 }} views
+                {% else %}
+                    {{ data.comment_count }} comments analyzed
+                {% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{{ url_for('export.csv_download', analysis_id=data.analysis.id) }}"><i class="fas fa-file-csv me-2"></i>CSV</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('export.json_download', analysis_id=data.analysis.id) }}"><i class="fas fa-file-code me-2"></i>JSON</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('export.xlsx_download', analysis_id=data.analysis.id) }}"><i class="fas fa-file-excel me-2"></i>Excel</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('export.pdf_download', analysis_id=data.analysis.id) }}"><i class="fas fa-file-pdf me-2"></i>PDF</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('export.docx_download', analysis_id=data.analysis.id) }}"><i class="fas fa-file-word me-2"></i>Word</a></li>
+                </ul>
+            </div>
+            <a href="{{ url_for('analysis.history') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>History</a>
+            <form method="POST" action="{{ url_for('analysis.delete_analysis', analysis_id=data.analysis.id) }}" class="d-inline" onsubmit="return confirm('Delete this analysis and all of its data? This cannot be undone.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger" aria-label="Delete analysis"><i class="fas fa-trash"></i></button>
+            </form>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block content %}
+{# Alerts #}
 {% if data.is_demo %}
 <div class="alert alert-warning">
-    <i class="fas fa-flask me-2"></i>
-    <strong>Demo Mode</strong> &mdash; Results are based on simulated data.
+    <i class="fas fa-flask me-2"></i><strong>Demo Mode</strong> — Results are based on simulated data.
 </div>
 {% endif %}
-
 <div class="alert alert-info">
-    <i class="fas fa-info-circle me-2"></i>
-    AI/Bot detection is probabilistic and should not be treated as proof.
-    Scores are indicators, not definitive classifications.
+    <i class="fas fa-info-circle me-2"></i>AI/Bot detection is probabilistic and should not be treated as proof. Scores are indicators, not definitive classifications.
 </div>
 
 {% if data.analysis.analysis_summary %}
-<div class="card border-info mb-4">
-    <div class="card-header bg-dark text-info">
-        <h6 class="mb-0"><i class="fas fa-chart-simple me-2"></i>Analysis Summary</h6>
-    </div>
-    <div class="card-body">
-        <pre class="mb-0 text-light" style="font-family: inherit; white-space: pre-wrap;">{{ data.analysis.analysis_summary }}</pre>
-    </div>
+<div class="ss-card mb-4">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-chart-simple me-2 text-info"></i>Analysis Summary</h6></div>
+    <div class="card-body"><pre class="mb-0 text-light" style="font-family: inherit; white-space: pre-wrap;">{{ data.analysis.analysis_summary }}</pre></div>
 </div>
 {% endif %}
 
-{% if data.analysis.analysis_type == 'reddit' and data.reddit %}
-<div class="card border-secondary mb-4">
-    <div class="card-header bg-dark">
-        <h6 class="mb-0"><i class="fab fa-reddit text-orange me-2"></i>Reddit Post Information</h6>
-    </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-8">
-                {% if data.reddit.post_body %}
-                <p class="small text-muted mb-0">{{ data.reddit.post_body|truncate(300) }}</p>
-                {% endif %}
-                {% if data.reddit.permalink %}
-                <a href="https://reddit.com{{ data.reddit.permalink }}" target="_blank"
-                   class="btn btn-sm btn-outline-info mt-2">
-                    <i class="fas fa-external-link-alt me-1"></i>View on Reddit
-                </a>
-                {% endif %}
-            </div>
-            <div class="col-md-4">
-                <div class="row g-2 text-center">
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Score</div>
-                            <div class="fw-bold">{{ "{:,}".format(data.reddit.post_score) }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Upvote Ratio</div>
-                            <div class="fw-bold">{{ data.reddit.upvote_ratio }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Limit</div>
-                            <div class="fw-bold">{{ data.reddit.comment_limit }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Subreddit</div>
-                            <div class="fw-bold small">r/{{ data.reddit.subreddit }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% elif data.youtube and (data.youtube.video_description or data.youtube.view_count > 0) %}
-<div class="card border-secondary mb-4">
-    <div class="card-header bg-dark">
-        <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Video Information</h6>
-    </div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-8">
-                {% if data.youtube.video_description %}
-                <p class="small text-muted mb-0">{{ data.youtube.video_description|truncate(300) }}</p>
-                {% endif %}
-            </div>
-            <div class="col-md-4">
-                <div class="row g-2 text-center">
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Views</div>
-                            <div class="fw-bold">{{ "{:,}".format(data.youtube.view_count) }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Likes</div>
-                            <div class="fw-bold">{{ "{:,}".format(data.youtube.like_count) }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Limit</div>
-                            <div class="fw-bold">{{ data.youtube.comment_limit }}</div>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="bg-dark rounded p-2">
-                            <div class="small text-muted">Channel</div>
-                            <div class="fw-bold small">{{ data.youtube.channel_name }}</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
+{# Primary assessment — prominent risk #}
 <div class="row g-3 mb-4">
-    <div class="col-md-3 col-6">
-        <div class="card border-secondary h-100">
-            <div class="card-body text-center">
-                <div class="fs-2 fw-bold text-info">{{ data.comment_count }}</div>
-                <div class="text-muted small">Comments Analyzed</div>
+    <div class="col-lg-5">
+        <div class="ss-card ss-card--elevated h-100 text-center p-4">
+            <div class="small text-muted text-uppercase" style="letter-spacing: 0.06em;">Overall Risk</div>
+            {% set _risk = data.averages.avg_risk if data.averages is defined else 0 %}
+            <div class="display-4 fw-bold ss-mono mt-2 {% if _risk > 75 %}text-danger{% elif _risk > 50 %}text-warning{% elif _risk > 25 %}text-info{% else %}text-success{% endif %}">{{ _risk }}</div>
+            <div class="mt-2">
+                {% set _level = 'Low' if _risk <= 25 else 'Medium' if _risk <= 50 else 'High' if _risk <= 75 else 'Critical' %}
+                <span class="badge bg-{{ 'success' if _level == 'Low' else 'warning' if _level == 'Medium' else 'danger' }}">{{ _level }}</span>
+                <span class="badge bg-secondary ms-1">High-Risk</span>
             </div>
+            <p class="small text-muted mt-3 mb-0">Heuristic aggregate of spam, toxicity, sentiment and bot signals. Not proof of maliciousness.</p>
         </div>
     </div>
-    <div class="col-md-3 col-6">
-        <div class="card border-secondary h-100">
-            <div class="card-body text-center">
-                <div class="fs-2 fw-bold text-warning">{{ data.averages.avg_risk }}</div>
-                <div class="text-muted small">Average Risk</div>
+    <div class="col-lg-7">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-gauge-high me-2 text-primary"></i>Primary Scores</h6>
+                <span class="badge bg-secondary">{{ data.comment_count }} comments</span>
             </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card border-secondary h-100">
-            <div class="card-body text-center">
-                <div class="fs-2 fw-bold text-danger">{{ data.high_risk|length }}</div>
-                <div class="text-muted small">High-Risk</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card border-secondary h-100">
-            <div class="card-body text-center">
-                <div class="fs-2 fw-bold text-primary">{{ data.averages.avg_spam }}</div>
-                <div class="text-muted small">Avg Spam</div>
+            <div class="card-body">
+                <div class="row g-2 text-center">
+                    {% set scores = [
+                        ('Sentiment', data.averages.avg_sentiment, 'success'),
+                        ('Toxicity', data.averages.avg_toxicity, 'danger'),
+                        ('Spam', data.averages.avg_spam, 'warning'),
+                        ('Bot', data.averages.avg_bot, 'info'),
+                        ('AI-like', data.averages.avg_ai_like, 'info'),
+                        ('Duplicate', data.sentiment_distribution|length, 'secondary')
+                    ] %}
+                    <div class="col-4 col-md-2">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Average Risk</div>
+                            <div class="fw-bold ss-mono text-warning">{{ data.averages.avg_risk }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Avg Sentiment</div>
+                            <div class="fw-bold ss-mono text-success">{{ data.averages.avg_sentiment }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Avg Toxicity</div>
+                            <div class="fw-bold ss-mono text-danger">{{ data.averages.avg_toxicity }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Avg Spam</div>
+                            <div class="fw-bold ss-mono text-warning">{{ data.averages.avg_spam }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Avg Bot</div>
+                            <div class="fw-bold ss-mono text-info">{{ data.averages.avg_bot }}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Critical</div>
+                            <div class="fw-bold text-danger">{{ data.high_risk|length if data.high_risk is defined else 0 }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-2 mt-2 small text-muted">
+                    <div class="col-6">Sentiment: {% for k, v in data.sentiment_distribution.items() %}{{ k }} {{ v }} {% endfor %}</div>
+                    <div class="col-6">Risk: {% for k, v in data.risk_distribution.items() %}{{ k }} {{ v }} {% endfor %}</div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-{% if data.youtube %}
-<div class="card border-info border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-closed-captioning me-2"></i>Transcript Intelligence</h6>
-        {% if data.transcript %}
-        <span class="badge bg-{{ 'success' if data.transcript.is_real else 'warning' if data.transcript.is_fallback or data.transcript.is_demo_transcript else 'secondary' }}">
-            {{ data.transcript.friendly_status }}
-        </span>
-        {% endif %}
+<div class="ss-card mb-4 d-none d-md-block">
+    <div class="card-body py-2">
+        <div class="row g-2 text-center small">
+            <div class="col-4"><div class="text-muted">Comments Analyzed</div><div class="fw-bold ss-mono">{{ data.comment_count }}</div></div>
+            <div class="col-4"><div class="text-muted">Average Risk</div><div class="fw-bold ss-mono">{{ data.averages.avg_risk }}</div></div>
+            <div class="col-4"><div class="text-muted">High-Risk</div><div class="fw-bold">{{ data.high_risk|length if data.high_risk is defined else 0 }}</div></div>
+        </div>
     </div>
+</div>
+
+{# Intelligence navigation — sticky #}
+<nav class="ss-card mb-4 p-2 sticky-top" style="top: 56px; z-index: 1020;" aria-label="Intelligence sections">
+    <ul class="nav nav-pills nav-fill">
+        <li class="nav-item"><a class="nav-link" href="#overview">Overview</a></li>
+        <li class="nav-item"><a class="nav-link" href="#risk">Risk</a></li>
+        <li class="nav-item"><a class="nav-link" href="#threat">Threat</a></li>
+        <li class="nav-item"><a class="nav-link" href="#authenticity">Authenticity</a></li>
+        <li class="nav-item"><a class="nav-link" href="#historical">Historical</a></li>
+        <li class="nav-item"><a class="nav-link" href="#evidence">Evidence</a></li>
+        <li class="nav-item"><a class="nav-link" href="#comments">Comments</a></li>
+    </ul>
+</nav>
+
+{# Overview anchor #}
+<section id="overview" aria-labelledby="overview-heading">
+<h2 id="overview-heading" class="h5 fw-bold mb-3">Intelligence Overview</h2>
+
+{# Video / Reddit metadata — compact #}
+{% if data.analysis.analysis_type == 'reddit' and data.reddit %}
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fab fa-reddit text-orange me-2"></i>Reddit Post Information</h6></div>
     <div class="card-body">
-        {% if data.transcript and data.transcript.is_available %}
         <div class="row g-3">
-            <div class="col-md-6">
-                <div class="bg-dark rounded p-3 h-100">
-                    <h6 class="small text-muted mb-2"><i class="fas fa-tags me-1"></i>Topics</h6>
-                    <div>
-                        {% if data.transcript.topics %}
-                        {% for t in data.transcript.topics.split(', ') %}
-                        <span class="badge bg-info text-dark me-1 mb-1">{{ t }}</span>
-                        {% endfor %}
-                        {% else %}
-                        <span class="text-muted small">No topics extracted</span>
-                        {% endif %}
-                    </div>
-                    <div class="mt-2">
-                        <span class="text-muted small">
-                            {{ data.transcript.word_count }} words,
-                            {{ data.transcript.segment_count }} segments
-                            {% if data.transcript.language %}
-                            &middot; {{ data.transcript.language }}
-                            {% endif %}
-                            {% if data.transcript.duration_seconds %}
-                            &middot; {{ (data.transcript.duration_seconds / 60)|round(1) }} min
-                            {% endif %}
-                        </span>
-                    </div>
-                </div>
+            <div class="col-md-8">
+                {% if data.reddit.post_body %}<p class="small text-muted mb-0">{{ data.reddit.post_body|truncate(300) }}</p>{% endif %}
+                {% if data.reddit.permalink %}<a href="https://reddit.com{{ data.reddit.permalink }}" target="_blank" class="btn btn-sm btn-outline-info mt-2"><i class="fas fa-external-link-alt me-1"></i>View on Reddit</a>{% endif %}
             </div>
-            <div class="col-md-6">
-                <div class="bg-dark rounded p-3 h-100">
-                    <h6 class="small text-muted mb-2"><i class="fas fa-chart-bar me-1"></i>Context Match Distribution</h6>
-                    {% if data.context_distribution %}
-                    <div class="row g-1 text-center">
-                        <div class="col-3">
-                            <div class="small fw-bold text-success">{{ data.context_distribution.highly_relevant }}</div>
-                            <div class="small text-muted">High</div>
-                        </div>
-                        <div class="col-3">
-                            <div class="small fw-bold text-info">{{ data.context_distribution.relevant }}</div>
-                            <div class="small text-muted">Relevant</div>
-                        </div>
-                        <div class="col-3">
-                            <div class="small fw-bold text-warning">{{ data.context_distribution.partially_relevant }}</div>
-                            <div class="small text-muted">Partial</div>
-                        </div>
-                        <div class="col-3">
-                            <div class="small fw-bold text-danger">{{ data.context_distribution.off_topic }}</div>
-                            <div class="small text-muted">Off-Topic</div>
-                        </div>
-                    </div>
-                    {% else %}
-                    <span class="text-muted small">No context data available</span>
-                    {% endif %}
+            <div class="col-md-4">
+                <div class="row g-2 text-center">
+                    <div class="col-6"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Score</div><div class="fw-bold">{{ "{:,}".format(data.reddit.post_score) }}</div></div></div>
+                    <div class="col-6"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Upvote Ratio</div><div class="fw-bold">{{ data.reddit.upvote_ratio }}</div></div></div>
                 </div>
             </div>
         </div>
-        {% if data.transcript.summary %}
-        <div class="mt-3 bg-dark rounded p-3">
-            <h6 class="small text-muted mb-1"><i class="fas fa-align-left me-1"></i>Transcript Summary</h6>
-            <p class="small mb-0">{{ data.transcript.summary }}</p>
-        </div>
-        {% endif %}
-        {% elif data.transcript and data.transcript.failure_reason %}
-        <div class="text-center py-3">
-            <i class="fas fa-exclamation-triangle text-warning fa-2x mb-2"></i>
-            <p class="mb-1 text-warning">{{ data.transcript.friendly_status }}</p>
-            <p class="small text-muted mb-0">
-                Comment analysis is still complete, but transcript-based context scoring is not available.
-            </p>
-        </div>
-        {% elif data.transcript and data.transcript.source == 'unavailable' and not data.transcript.failure_reason %}
-        <div class="text-center py-3">
-            <i class="fas fa-closed-captioning text-muted fa-2x mb-2"></i>
-            <p class="mb-1 text-muted">Transcript is not available for this video.</p>
-            <p class="small text-muted mb-0">
-                Comment analysis is still complete without transcript context.
-            </p>
-        </div>
-        {% else %}
-        <div class="text-center py-3">
-            <i class="fas fa-closed-captioning text-muted fa-2x mb-2"></i>
-            <p class="text-muted mb-0">Transcript intelligence was not enabled for this analysis.</p>
-        </div>
-        {% endif %}
     </div>
 </div>
-{% endif %}
-
-{% if data.context_intelligence %}
-<div class="card border-success border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-network-wired me-2 text-success"></i>Channel Context Intelligence</h6>
-        {% if data.context_intelligence.trend_direction %}
-        <span class="badge bg-{{ 'success' if data.context_intelligence.trend_direction == 'positive' else 'danger' if data.context_intelligence.trend_direction == 'negative' else 'secondary' }}">
-            <i class="fas fa-{{ 'arrow-up' if data.context_intelligence.trend_direction == 'positive' else 'arrow-down' if data.context_intelligence.trend_direction == 'negative' else 'minus' }} me-1"></i>
-            {{ data.context_intelligence.trend_direction|title }}
-        </span>
-        {% endif %}
-    </div>
+{% elif data.youtube %}
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Video Information</h6></div>
     <div class="card-body">
-        <div class="row g-3 mb-3">
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Historical Context</small>
-                    <span class="fw-bold fs-4 text-info">{{ data.context_intelligence.historical_context }}</span>
+        <div class="row g-3">
+            <div class="col-md-8">
+                {% if data.youtube.video_description %}<p class="small text-muted mb-0">{{ data.youtube.video_description|truncate(300) }}</p>{% endif %}
+                <div class="mt-2">
+                    <span class="badge bg-secondary me-1">{{ data.youtube.channel_name }}</span>
+                    <span class="badge bg-dark border text-muted">{{ data.youtube.view_count }} views</span>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Entity Recurrence</small>
-                    <span class="fw-bold fs-4 text-primary">{{ data.context_intelligence.entity_recurrence }}</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Topic Recurrence</small>
-                    <span class="fw-bold fs-4 text-warning">{{ data.context_intelligence.topic_recurrence }}</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Channel Relevance</small>
-                    <span class="fw-bold fs-4 text-success">{{ data.context_intelligence.channel_relevance }}</span>
+            <div class="col-md-4">
+                <div class="row g-2 text-center">
+                    <div class="col-6"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Published</div><div class="small fw-bold">{{ data.youtube.published_at.strftime('%Y-%m-%d') if data.youtube.published_at else '—' }}</div></div></div>
+                    <div class="col-6"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Comments</div><div class="fw-bold">{{ data.youtube.comment_count }}</div></div></div>
                 </div>
             </div>
         </div>
-        {% if data.context_intelligence.trends and data.context_intelligence.trends.previous_video_count > 0 %}
-        <div class="bg-dark rounded p-3">
-            <h6 class="small text-muted mb-2"><i class="fas fa-chart-line me-1"></i>Historical Trends</h6>
-            <div class="row g-2 text-center">
-                <div class="col-4">
-                    <small class="text-muted d-block">Previous Videos</small>
-                    <span class="fw-bold">{{ data.context_intelligence.trends.previous_video_count }}</span>
-                </div>
-                <div class="col-4">
-                    <small class="text-muted d-block">Sentiment Change</small>
-                    <span class="fw-bold text-{{ 'success' if data.context_intelligence.trends.avg_sentiment_change >= 0 else 'danger' }}">
-                        {{ '%+.1f'|format(data.context_intelligence.trends.avg_sentiment_change) }}
-                    </span>
-                </div>
-                <div class="col-4">
-                    <small class="text-muted d-block">Risk Change</small>
-                    <span class="fw-bold text-{{ 'success' if data.context_intelligence.trends.avg_risk_change <= 0 else 'danger' }}">
-                        {{ '%+.1f'|format(data.context_intelligence.trends.avg_risk_change) }}
-                    </span>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        {% if data.context_intelligence.recurring_topics %}
-        <div class="mt-2">
-            <small class="text-muted">Recurring Topics: </small>
-            {% for t in data.context_intelligence.recurring_topics[:5] %}
-            <span class="badge bg-secondary me-1">{{ t.topic }} ({{ t.appearances }})</span>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
 </div>
 {% endif %}
+</section>
 
-{% if v12 and v12.threat %}
-<div class="card border-danger border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-triangle-exclamation me-2 text-danger"></i>Threat Assessment</h6>
+{# Risk section #}
+<section id="risk" aria-labelledby="risk-heading" class="mb-4">
+<h3 id="risk-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Risk Intelligence</h3>
+<div class="ss-card ss-card--intelligence ss-intel-risk-medium">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-triangle-exclamation me-2 text-warning"></i>Risk Assessment</h6></div>
+    <div class="card-body">
+        <div class="row g-2 text-center">
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Avg Risk</div><div class="fw-bold ss-mono text-warning">{{ data.averages.avg_risk }}</div></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">High Risk</div><div class="fw-bold">{{ data.high_risk|length }}</div></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Spam Top</div><div class="small fw-bold">{{ data.top_spam[0].spam_score if data.top_spam else '—' }}</div></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Toxic Top</div><div class="small fw-bold">{{ data.top_toxic[0].toxicity_score if data.top_toxic else '—' }}</div></div></div>
+        </div>
+    </div>
+</div>
+</section>
+
+{# Threat intelligence — preserve V12 #}
+{% if v12 and v12.threat and v12.threat.overall_threat_score is not none %}
+<section id="threat" aria-labelledby="threat-heading" class="mb-4">
+<h3 id="threat-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Threat Intelligence</h3>
+<div class="ss-card ss-card--intelligence ss-intel-threat">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-triangle-exclamation me-2" style="color: var(--ss-threat);"></i>Threat Assessment</h6>
         <span class="badge bg-secondary">heuristic weighted assessment</span>
     </div>
     <div class="card-body">
-        <div class="row g-3 mb-3">
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Overall Threat Score</small>
-                    <span class="fw-bold fs-4 text-danger">{{ v12.threat.overall_threat_score }}</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Threat Level</small>
-                    <span class="fw-bold fs-5 text-{{ 'danger' if v12.threat.threat_level in ('High', 'Elevated') else 'warning' if v12.threat.threat_level == 'Moderate' else 'success' }}">
-                        {{ v12.threat.threat_level }}
-                    </span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Confidence</small>
-                    <span class="fw-bold fs-4 text-info">{{ v12.threat.confidence }}%</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Evidence Coverage</small>
-                    <span class="fw-bold fs-4 text-warning">{{ (v12.threat.evidence_coverage * 100)|round|int }}%</span>
-                </div>
-            </div>
-        </div>
         <div class="row g-2 mb-3">
-            {% set comps = [('authenticity', 'Authenticity'), ('coordination', 'Coordination'),
-                            ('narrative', 'Narrative Risk'), ('propagation', 'Propagation'),
-                            ('temporal', 'Temporal'), ('entity', 'Entity Risk')] %}
-            {% for key, label in comps %}
-            <div class="col-6 col-md-2">
-                <div class="p-2 bg-dark rounded text-center">
-                    <small class="text-muted d-block">{{ label }}</small>
-                    {% if v12.threat.component_scores.get(key) is not none %}
-                    <span class="fw-bold text-warning">{{ v12.threat.component_scores.get(key) }}</span>
-                    {% else %}
-                    <span class="fw-bold text-muted"><em>Unavailable</em></span>
-                    {% endif %}
-                </div>
-            </div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background: var(--ss-surface-raised);"><div class="small text-muted">Overall Threat Score</div><span class="fw-bold fs-5" style="color: var(--ss-danger);">{{ v12.threat.overall_threat_score }}</span></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background: var(--ss-surface-raised);"><div class="small text-muted">Threat Level</div><span class="fw-bold fs-6 badge bg-{{ 'danger' if v12.threat.threat_level in ('High', 'Elevated') else 'warning' if v12.threat.threat_level == 'Moderate' else 'success' }}">{{ v12.threat.threat_level }}</span></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background: var(--ss-surface-raised);"><div class="small text-muted">Confidence</div><span class="fw-bold">{{ v12.threat.confidence }}%</span></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded text-center" style="background: var(--ss-surface-raised);"><div class="small text-muted">Evidence Coverage</div><span class="fw-bold">{{ v12.threat.evidence_coverage }}%</span></div></div>
+        </div>
+        {% set _threat_components = [('authenticity','Authenticity'),('coordination','Coordination'),('narrative','Narrative Risk'),('propagation','Propagation'),('temporal','Temporal'),('entity','Entity Risk')] %}
+        <div class="row g-2 small">
+            {% for key, label in _threat_components %}
+            <div class="col-6 col-md-4"><div class="p-2 rounded d-flex justify-content-between" style="background: var(--ss-surface-raised);"><span class="text-muted">{{ label }}</span>{% if v12.threat.component_scores and key in v12.threat.component_scores %}<span class="fw-bold ss-mono">{{ v12.threat.component_scores[key] }}</span>{% else %}<span class="text-muted"><em>Unavailable</em></span>{% endif %}</div></div>
             {% endfor %}
         </div>
-        {% if v12.threat.capability_labels %}
-        <div class="mb-2">
-            <small class="text-muted">Component Capability: </small>
-            {% for key, label in comps %}
-            <span class="badge bg-secondary me-1">{{ label }}: {{ v12.threat.capability_labels.get(key, 'n/a') }}</span>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% if v12.threat.summary %}
-        <p class="small mb-2">{{ v12.threat.summary }}</p>
-        {% endif %}
         {% if v12.threat.reasons %}
-        <div class="bg-dark rounded p-3 mb-2">
+        <div class="mt-3">
             <h6 class="small text-muted mb-2"><i class="fas fa-list-check me-1"></i>Reasons</h6>
-            <ul class="small mb-0 ps-3">
-                {% for reason in v12.threat.reasons[:12] %}
-                <li>{{ reason }}</li>
-                {% endfor %}
+            <ul class="small mb-0">
+                {% for r in v12.threat.reasons[:6] %}<li>{{ r }}</li>{% endfor %}
             </ul>
         </div>
         {% endif %}
         {% if v12.threat.limitations %}
-        <div class="bg-dark rounded p-3 mb-2">
+        <div class="mt-3">
             <h6 class="small text-muted mb-2"><i class="fas fa-circle-info me-1"></i>Limitations</h6>
-            <ul class="small mb-0 ps-3">
-                {% for limitation in v12.threat.limitations[:8] %}
-                <li>{{ limitation }}</li>
-                {% endfor %}
+            <ul class="small text-muted mb-0">
+                {% for lim in v12.threat.limitations[:4] %}<li>{{ lim }}</li>{% endfor %}
             </ul>
         </div>
         {% endif %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            This is a heuristic, non-causal assessment combining available component signals.
-            It indicates relative risk based on observed indicators and is not a definitive
-            classification or proof of intent, authorship, or coordination.
-        </p>
+        <small class="text-muted d-block mt-2">Heuristic, non-causal assessment.</small>
     </div>
 </div>
+</section>
 {% endif %}
 
-{% if data.media_analysis %}
-<div class="card border-warning border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-shield-halved me-2 text-warning"></i>Authenticity Intelligence</h6>
-        <span class="badge bg-secondary">heuristic assessment</span>
+{# Authenticity intelligence — V11 #}
+<section id="authenticity" aria-labelledby="authenticity-heading" class="mb-4">
+<h3 id="authenticity-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Authenticity Intelligence</h3>
+{% if v12 and v12.authenticity is defined %}
+<div class="ss-card ss-card--intelligence ss-intel-authenticity">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-shield-halved me-2" style="color: var(--ss-authenticity);"></i>Authenticity Intelligence</h6>
+        <span class="badge bg-secondary">heuristic</span>
     </div>
     <div class="card-body">
-        <div class="row g-3 mb-3">
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">AI Probability</small>
-                    <span class="fw-bold fs-4 text-danger">{{ data.media_analysis.overall_ai_probability }}%</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Authenticity Score</small>
-                    <span class="fw-bold fs-4 text-success">{{ data.media_analysis.overall_authenticity_score }}</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Confidence</small>
-                    <span class="fw-bold fs-4 text-info">{{ data.media_analysis.confidence }}%</span>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="bg-dark rounded p-3 text-center h-100">
-                    <small class="text-muted d-block">Summary</small>
-                    <span class="small">{{ data.media_analysis.summary or 'N/A' }}</span>
-                </div>
-            </div>
+        <p class="small text-muted">Authenticity indicators are heuristic and probabilistic, not proof of AI generation.</p>
+        {% if data.media_analysis %}
+        <div class="row g-2 text-center">
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Overall AI</div><div class="fw-bold ss-mono">{{ data.media_analysis.overall_ai_probability }}%</div></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Deepfake</div><div class="fw-bold">{{ data.media_analysis.deepfake_score }}</div></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Voice Clone</div><div class="fw-bold">{{ data.media_analysis.synthetic_voice_score }}</div></div></div>
+            <div class="col-6 col-md-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Authenticity</div><div class="fw-bold">{{ data.media_analysis.overall_authenticity_score }}%</div></div></div>
         </div>
-        <div class="row g-2 mb-3">
-            <div class="col-6 col-md-2">
-                <div class="p-2 bg-dark rounded text-center">
-                    <small class="text-muted d-block">Deepfake</small>
-                    <span class="fw-bold text-warning">{{ data.media_analysis.deepfake_score }}</span>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="p-2 bg-dark rounded text-center">
-                    <small class="text-muted d-block">Synthetic Voice</small>
-                    <span class="fw-bold text-warning">{{ data.media_analysis.synthetic_voice_score }}</span>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="p-2 bg-dark rounded text-center">
-                    <small class="text-muted d-block">Thumbnail</small>
-                    <span class="fw-bold text-warning">{{ data.media_analysis.thumbnail_ai_score }}</span>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="p-2 bg-dark rounded text-center">
-                    <small class="text-muted d-block">Frame Manipulation</small>
-                    <span class="fw-bold text-warning">{{ data.media_analysis.frame_manipulation_score }}</span>
-                </div>
-            </div>
-            <div class="col-6 col-md-2">
-                <div class="p-2 bg-dark rounded text-center">
-                    <small class="text-muted d-block">Metadata</small>
-                    <span class="fw-bold text-warning">{{ data.media_analysis.metadata_score }}</span>
-                </div>
-            </div>
-        </div>
-        {% if data.media_analysis.indicators %}
-        <div class="mb-2">
-            <small class="text-muted">Indicators: </small>
-            {% for indicator in data.media_analysis.indicators[:10] %}
-            <span class="badge bg-warning text-dark me-1">{{ indicator }}</span>
-            {% endfor %}
-        </div>
+        {% else %}
+        <p class="text-muted small mb-0">No media authenticity data.</p>
         {% endif %}
-        {% if data.media_analysis.reasons %}
-        <div class="bg-dark rounded p-3">
-            <h6 class="small text-muted mb-2"><i class="fas fa-list-check me-1"></i>Explainable Reasons</h6>
-            <ul class="small mb-0 ps-3">
-                {% for reason in data.media_analysis.reasons[:12] %}
-                <li>{{ reason }}</li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            This is a heuristic, explainable assessment based on available signals. It indicates
-            possible AI-generated content but does not constitute proof of synthetic media.
-        </p>
     </div>
 </div>
 {% endif %}
+</section>
 
-{% if v12 and (v12.narratives or v12.coordination or v12.propagation or v12.temporal) %}
-<div class="alert alert-secondary">
-    <i class="fas fa-info-circle me-2"></i>
-    The following V12 intelligence sections are heuristic and non-causal. They describe
-    observed patterns in comments and platform activity and do not prove intent,
-    authorship, conspiracy, or actual causal propagation.
-</div>
-{% endif %}
-
-{% if v12 and v12.narratives %}
-<div class="card border-primary border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-comments me-2 text-primary"></i>Narratives &amp; Growth</h6>
-        <span class="badge bg-secondary">heuristic, observed growth</span>
-    </div>
-    <div class="card-body">
-        {% for n in v12.narratives %}
-        <div class="bg-dark rounded p-3 mb-2">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div>
-                    <span class="fw-bold">{{ n.name }}</span>
-                    {% if n.category %}
-                    <span class="badge bg-secondary ms-1">{{ n.category }}</span>
-                    {% endif %}
-                    {% if n.risk_level %}
-                    <span class="badge bg-{{ 'danger' if n.risk_level in ('High', 'Critical') else 'warning' if n.risk_level == 'Elevated' else 'info' }}">
-                        {{ n.risk_level }}
-                    </span>
-                    {% endif %}
-                </div>
-                <div class="d-flex gap-2">
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Risk</small>
-                        <span class="fw-bold text-warning">{{ n.risk_score }}</span>
-                    </div>
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Growth</small>
-                        <span class="fw-bold text-info">{{ n.growth_score }}</span>
-                    </div>
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Confidence</small>
-                        <span class="fw-bold text-success">{{ n.confidence }}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="small text-muted mt-2">
-                <span>{{ n.occurrence_count }} occurrences</span>
-                {% if n.platform_count %} &middot; <span>{{ n.platform_count }} platform{{ 's' if n.platform_count != 1 }}</span>{% endif %}
-                {% if n.is_cross_platform %} &middot; <span class="text-info">cross-platform</span>{% endif %}
-            </div>
-            {% if n.keywords %}
-            <div class="mt-1">
-                <small class="text-muted">Keywords: </small>
-                {% for kw in n.keywords[:8] %}
-                <span class="badge bg-secondary me-1">{{ kw }}</span>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if n.evidence and n.evidence.samples %}
-            <div class="mt-1 small text-muted">
-                <i class="fas fa-quote-left me-1"></i>{{ n.evidence.samples[:3]|join(' | ') }}
-            </div>
-            {% endif %}
-        </div>
-        {% endfor %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            Growth scores reflect observed recurrence of a narrative across analyzed content.
-            This is heuristic and descriptive — it is not a prediction and does not imply
-            causality.
-        </p>
-    </div>
-</div>
-{% endif %}
-
-{% if v12 and v12.coordination %}
-<div class="card border-info border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-link me-2 text-info"></i>Coordination Signals</h6>
-        <span class="badge bg-secondary">heuristic, observed patterns</span>
-    </div>
-    <div class="card-body">
-        {% for s in v12.coordination %}
-        <div class="bg-dark rounded p-3 mb-2">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div>
-                    <span class="fw-bold">{{ s.signal_type|replace('_', ' ')|title }}</span>
-                    <span class="badge bg-{{ 'danger' if s.level in ('high', 'critical') else 'warning' if s.level == 'elevated' else 'info' }} ms-1">
-                        {{ s.level }}
-                    </span>
-                    {% if s.cluster_size %}
-                    <span class="badge bg-secondary ms-1">cluster: {{ s.cluster_size }}</span>
-                    {% endif %}
-                </div>
-                <div class="d-flex gap-2">
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Score</small>
-                        <span class="fw-bold text-warning">{{ s.score }}</span>
-                    </div>
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Confidence</small>
-                        <span class="fw-bold text-success">{{ s.confidence }}</span>
-                    </div>
-                </div>
-            </div>
-            {% if s.summary %}
-            <p class="small mb-1 mt-2">{{ s.summary }}</p>
-            {% endif %}
-            <div class="small text-muted">
-                {% if s.comparisons_performed is not none %}
-                <span>{{ s.comparisons_performed }} comparison{{ 's' if s.comparisons_performed != 1 }} performed</span>
-                {% if s.comparisons_truncated %}
-                <span class="text-warning"> &middot; comparisons truncated (subset compared)</span>
-                {% endif %}
-                {% endif %}
-                {% if s.window_seconds %}
-                <span> &middot; window: {{ (s.window_seconds / 3600)|round(1) }}h</span>
-                {% endif %}
-            </div>
-            {% if s.related_entities %}
-            <div class="mt-1">
-                <small class="text-muted">Related entities: </small>
-                {% for e in s.related_entities[:5] %}
-                <span class="badge bg-secondary me-1">{{ e }}</span>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if s.reasons %}
-            <ul class="small mb-0 mt-1 ps-3">
-                {% for r in s.reasons[:6] %}
-                <li>{{ r }}</li>
-                {% endfor %}
-            </ul>
-            {% endif %}
-        </div>
-        {% endfor %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            These signals describe observed similarities and timing in the analyzed comments.
-            They do not prove coordinated behavior, common authorship, conspiracy, or intent
-            by any person or group.
-        </p>
-    </div>
-</div>
-{% endif %}
-
-{% if v12 and v12.propagation %}
-<div class="card border-success border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-share-nodes me-2 text-success"></i>Propagation Relationships</h6>
-        <span class="badge bg-secondary">heuristic, observed relationships</span>
-    </div>
-    <div class="card-body">
-        {% for e in v12.propagation %}
-        <div class="bg-dark rounded p-3 mb-2">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div>
-                    <span class="fw-bold text-info">{{ e.source_platform }}</span>
-                    <i class="fas fa-arrow-right mx-2 text-muted"></i>
-                    <span class="fw-bold text-info">{{ e.target_platform }}</span>
-                    {% if e.relationship_type %}
-                    <span class="badge bg-secondary ms-1">{{ e.relationship_type|replace('_', ' ')|title }}</span>
-                    {% endif %}
-                    {% if e.is_cross_platform %}
-                    <span class="badge bg-success ms-1">cross-platform</span>
-                    {% endif %}
-                </div>
-                <div class="d-flex gap-2">
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Score</small>
-                        <span class="fw-bold text-warning">{{ e.propagation_score }}</span>
-                    </div>
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Similarity</small>
-                        <span class="fw-bold text-info">{{ e.similarity_score }}</span>
-                    </div>
-                    <div class="text-center px-2">
-                        <small class="text-muted d-block">Lag</small>
-                        <span class="fw-bold text-success">{{ (e.lag_seconds / 3600)|round(1) }}h</span>
-                    </div>
-                </div>
-            </div>
-            {% if e.shared_entities %}
-            <div class="mt-1">
-                <small class="text-muted">Shared entities: </small>
-                {% for ent in e.shared_entities[:5] %}
-                <span class="badge bg-secondary me-1">{{ ent }}</span>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if e.reasons %}
-            <ul class="small mb-0 mt-1 ps-3">
-                {% for r in e.reasons[:6] %}
-                <li>{{ r }}</li>
-                {% endfor %}
-            </ul>
-            {% endif %}
-        </div>
-        {% endfor %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            These relationships describe observed temporal ordering and content similarity
-            between analyses. They do not establish actual causal propagation, shared
-            authorship, or intent.
-        </p>
-    </div>
-</div>
-{% endif %}
-
-{% if v12 and v12.temporal %}
-<div class="card border-warning border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-clock me-2 text-warning"></i>Temporal Intelligence</h6>
-        <span class="badge bg-secondary">heuristic, observed growth</span>
-    </div>
-    <div class="card-body">
-        {% for t in v12.temporal %}
-        <div class="bg-dark rounded p-3 mb-2">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div>
-                    <span class="fw-bold">{{ t.normalized_name|replace('_', ' ')|title }}</span>
-                </div>
-                <div class="text-center px-2">
-                    <small class="text-muted d-block">Growth</small>
-                    <span class="fw-bold text-info">{{ t.growth_score }}</span>
-                </div>
-            </div>
-            {% if t.signals %}
-            <div class="row g-2 mt-2">
-                {% for key, value in t.signals.items() if value is not none %}
-                <div class="col-4 col-md-2">
-                    <div class="p-2 bg-dark rounded text-center">
-                        <small class="text-muted d-block">{{ key|replace('_', ' ')|title }}</small>
-                        <span class="fw-bold">{{ value }}</span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if t.first_seen_at or t.last_seen_at %}
-            <div class="small text-muted mt-2">
-                {% if t.first_seen_at %}<span>First seen: {{ t.first_seen_at[:10] }}</span>{% endif %}
-                {% if t.last_seen_at %}<span> &middot; Last seen: {{ t.last_seen_at[:10] }}</span>{% endif %}
-            </div>
-            {% endif %}
-            {% if t.reasons %}
-            <ul class="small mb-0 mt-1 ps-3">
-                {% for r in t.reasons[:6] %}
-                <li>{{ r }}</li>
-                {% endfor %}
-            </ul>
-            {% endif %}
-        </div>
-        {% endfor %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            Temporal scores describe observed growth, recency, span, and recurrence of
-            narratives over time. These are heuristic, descriptive observations and are
-            not predictions or causal claims.
-        </p>
-    </div>
-</div>
-{% endif %}
-
-{# V13 Historical Context & Explainable Intelligence (backend-computed, read-only) #}
+{# Historical Context — V13 #}
+<section id="historical" aria-labelledby="historical-heading" class="mb-4">
+<h3 id="historical-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Historical Context & Cross-Analysis</h3>
 {% if v13 and v13.baseline %}
-<div class="card border-info border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-clock-rotate-left me-2 text-info"></i>Historical Context</h6>
-        <span class="badge bg-secondary">heuristic baseline, last {{ v13.baseline.window_days }} days</span>
-    </div>
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-clock-rotate-left me-2 text-info"></i>Historical Context</h6></div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-dark table-sm mb-0">
-                <thead>
-                    <tr>
-                        <th>Metric</th>
-                        <th class="text-end">Current</th>
-                        <th class="text-end">Historical</th>
-                        <th class="text-end">Change</th>
-                        <th class="text-end">Sample</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
+                <thead><tr><th scope="col">Metric</th><th scope="col" class="text-end">Current</th><th scope="col" class="text-end">Historical</th><th scope="col" class="text-end">Change</th><th scope="col" class="text-end">Sample</th><th scope="col">Status</th></tr></thead>
                 <tbody>
                     {% for key, m in v13.baseline.metrics.items() %}
                     <tr>
                         <td>{{ m.metric|replace('_', ' ')|title }}</td>
-                        <td class="text-end">{% if m.current is not none %}{{ '%.1f'|format(m.current) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
-                        <td class="text-end">{% if m.baseline is not none %}{{ '%.1f'|format(m.baseline) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
-                        <td class="text-end">{% if m.deviation is not none %}{{ '%+.1f'|format(m.deviation) }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                        <td class="text-end ss-mono">{% if m.current is not none %}{{ '%.1f'|format(m.current) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end ss-mono">{% if m.baseline is not none %}{{ '%.1f'|format(m.baseline) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end ss-mono">{% if m.deviation is not none %}{{ '%+.1f'|format(m.deviation) }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                         <td class="text-end">{{ m.sample_size }}</td>
-                        <td>
-                            {% if m.availability == 'typical' %}<span class="badge bg-success">typical</span>
-                            {% elif m.availability in ('moderately_above_baseline', 'moderately_below_baseline') %}<span class="badge bg-warning text-dark">{{ m.availability }}</span>
-                            {% elif m.availability in ('substantially_above_baseline', 'substantially_below_baseline') %}<span class="badge bg-danger">{{ m.availability }}</span>
-                            {% elif m.availability == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>
-                            {% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}
-                        </td>
+                        <td>{% if m.availability == 'typical' %}<span class="badge bg-success">typical</span>{% elif m.availability in ('moderately_above_baseline', 'moderately_below_baseline') %}<span class="badge bg-warning text-dark">{{ m.availability }}</span>{% elif m.availability in ('substantially_above_baseline', 'substantially_below_baseline') %}<span class="badge bg-danger">{{ m.availability }}</span>{% elif m.availability == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        <p class="small text-muted mt-2 mb-0 px-3 pb-3">
-            <i class="fas fa-circle-info me-1"></i>
-            Baselines compare this analysis with prior analyses by the same user.
-            Unavailable values are ignored, never treated as zero. Deviations are
-            descriptive, not causal claims.
-        </p>
+        <p class="small text-muted mt-2 mb-0 px-3 pb-3">Historical baselines are descriptive, not causal.</p>
     </div>
 </div>
 {% endif %}
 
 {% if v13 and v13.comparison %}
-<div class="card border-info border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
         <h6 class="mb-0"><i class="fas fa-code-compare me-2 text-info"></i>Cross-Analysis Comparison</h6>
-        <span class="badge bg-secondary">{{ v13.comparison.historical_analysis_ids|length }} prior analyses &middot; {{ v13.comparison.window_days }} days</span>
+        <span class="badge bg-secondary">{{ v13.comparison.historical_analysis_ids|length }} prior · {{ v13.comparison.window_days }} days</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-dark table-sm mb-0">
-                <thead>
-                    <tr>
-                        <th>Metric</th>
-                        <th class="text-end">Current</th>
-                        <th class="text-end">Historical</th>
-                        <th class="text-end">Change</th>
-                        <th class="text-end">Sample</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
+                <thead><tr><th scope="col">Metric</th><th scope="col" class="text-end">Current</th><th scope="col" class="text-end">Historical</th><th scope="col" class="text-end">Change</th><th scope="col" class="text-end">Sample</th><th scope="col">Status</th></tr></thead>
                 <tbody>
                     {% for key, m in v13.comparison.metrics.items() %}
                     <tr>
                         <td>{{ m.metric|replace('_', ' ')|title }}</td>
-                        <td class="text-end">{% if m.current is not none %}{{ '%.1f'|format(m.current) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
-                        <td class="text-end">{% if m.baseline is not none %}{{ '%.1f'|format(m.baseline) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
-                        <td class="text-end">{% if m.delta is not none %}{{ '%+.1f'|format(m.delta) }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                        <td class="text-end ss-mono">{% if m.current is not none %}{{ '%.1f'|format(m.current) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end ss-mono">{% if m.baseline is not none %}{{ '%.1f'|format(m.baseline) }}{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
+                        <td class="text-end ss-mono">{% if m.delta is not none %}{{ '%+.1f'|format(m.delta) }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                         <td class="text-end">{{ m.sample_size }}</td>
-                        <td>
-                            {% if m.availability == 'typical' %}<span class="badge bg-success">typical</span>
-                            {% elif m.availability in ('moderately_above_baseline', 'moderately_below_baseline') %}<span class="badge bg-warning text-dark">{{ m.availability }}</span>
-                            {% elif m.availability in ('substantially_above_baseline', 'substantially_below_baseline') %}<span class="badge bg-danger">{{ m.availability }}</span>
-                            {% elif m.availability == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>
-                            {% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}
-                        </td>
+                        <td>{% if m.availability == 'typical' %}<span class="badge bg-success">typical</span>{% elif m.availability in ('moderately_above_baseline', 'moderately_below_baseline') %}<span class="badge bg-warning text-dark">{{ m.availability }}</span>{% elif m.availability in ('substantially_above_baseline', 'substantially_below_baseline') %}<span class="badge bg-danger">{{ m.availability }}</span>{% elif m.availability == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>{% else %}<span class="badge bg-secondary">Unavailable</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        {% if v13.comparison.limitations %}
-        <ul class="small text-muted mt-2 mb-0 px-3 pb-1 ps-4">
-            {% for note in v13.comparison.limitations %}
-            <li>{{ note }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-        <p class="small text-muted mt-1 mb-0 px-3 pb-3">
-            <i class="fas fa-circle-info me-1"></i>
-            {{ v13.comparison.disclaimer }}
-        </p>
+        {% if v13.comparison.limitations %}<ul class="small text-muted mt-2 mb-0 px-3">{% for note in v13.comparison.limitations %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+        <p class="small text-muted mt-2 mb-0 px-3 pb-3">{{ v13.comparison.disclaimer }}</p>
     </div>
 </div>
 {% endif %}
 
 {% if v13 and v13.evolution %}
-<div class="card border-info border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-arrow-trend-up me-2 text-info"></i>Narrative Evolution</h6>
-        <span class="badge bg-secondary">heuristic, observed occurrences</span>
-    </div>
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-arrow-trend-up me-2 text-info"></i>Narrative Evolution</h6></div>
     <div class="card-body">
         {% for n in v13.evolution.narratives %}
-        <div class="bg-dark rounded p-3 mb-2">
+        <div class="rounded p-3 mb-2" style="background: var(--ss-surface-raised);">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                 <span class="fw-bold">{{ n.name or n.normalized_name }}</span>
-                {% if n.state == 'emerging' %}<span class="badge bg-info text-dark">emerging</span>
-                {% elif n.state == 'persistent' %}<span class="badge bg-primary">persistent</span>
-                {% elif n.state == 'reappearing' %}<span class="badge bg-warning text-dark">reappearing</span>
-                {% elif n.state == 'declining' %}<span class="badge bg-secondary">declining</span>
-                {% elif n.state == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>
-                {% else %}<span class="badge bg-dark border">Unavailable</span>{% endif %}
+                {% if n.state == 'emerging' %}<span class="badge bg-info text-dark">emerging</span>{% elif n.state == 'persistent' %}<span class="badge bg-primary">persistent</span>{% elif n.state == 'reappearing' %}<span class="badge bg-warning text-dark">reappearing</span>{% elif n.state == 'declining' %}<span class="badge bg-secondary">declining</span>{% elif n.state == 'insufficient_history' %}<span class="badge bg-secondary">insufficient history</span>{% else %}<span class="badge bg-dark border">Unavailable</span>{% endif %}
             </div>
             <div class="row g-2 mt-2">
-                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Current</small><span class="fw-bold">{{ n.current_occurrences }}</span></div></div>
-                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Prior</small><span class="fw-bold">{{ n.prior_occurrences }}</span></div></div>
-                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Recent</small><span class="fw-bold">{{ n.recent_occurrences }}</span></div></div>
-                {% if n.gap_days is not none %}
-                <div class="col-4 col-md-2"><div class="p-2 bg-dark rounded text-center"><small class="text-muted d-block">Span (days)</small><span class="fw-bold">{{ n.gap_days }}</span></div></div>
-                {% endif %}
+                <div class="col-4 col-md-2"><div class="p-2 rounded text-center" style="background: var(--ss-bg);"><small class="text-muted d-block">Current</small><span class="fw-bold">{{ n.current_occurrences }}</span></div></div>
+                <div class="col-4 col-md-2"><div class="p-2 rounded text-center" style="background: var(--ss-bg);"><small class="text-muted d-block">Prior</small><span class="fw-bold">{{ n.prior_occurrences }}</span></div></div>
+                <div class="col-4 col-md-2"><div class="p-2 rounded text-center" style="background: var(--ss-bg);"><small class="text-muted d-block">Recent</small><span class="fw-bold">{{ n.recent_occurrences }}</span></div></div>
+                {% if n.gap_days is not none %}<div class="col-4 col-md-2"><div class="p-2 rounded text-center" style="background: var(--ss-bg);"><small class="text-muted d-block">Span (days)</small><span class="fw-bold">{{ n.gap_days }}</span></div></div>{% endif %}
             </div>
-            {% if n.first_seen_at or n.last_seen_at %}
-            <div class="small text-muted mt-2">
-                {% if n.first_seen_at %}<span>First seen: {{ n.first_seen_at[:10] }}</span>{% endif %}
-                {% if n.last_seen_at %}<span> &middot; Last seen: {{ n.last_seen_at[:10] }}</span>{% endif %}
-            </div>
-            {% endif %}
-            {% if n.unpositioned_occurrences %}
-            <div class="small text-muted mt-1">{{ n.unpositioned_occurrences }} occurrence(s) have no stored timestamp and were not placed in time.</div>
-            {% endif %}
-            {% if n.evidence_refs %}
-            <div class="small mt-1">
-                {% for ref in n.evidence_refs[:5] %}
-                <span class="badge bg-dark border me-1">{{ ref.ref }}</span>
-                {% endfor %}
-            </div>
-            {% endif %}
-            {% if n.limitation %}
-            <div class="small text-muted mt-1">{{ n.limitation }}</div>
-            {% endif %}
+            {% if n.first_seen_at or n.last_seen_at %}<div class="small text-muted mt-2">{% if n.first_seen_at %}<span>First seen: {{ n.first_seen_at[:10] }}</span>{% endif %}{% if n.last_seen_at %}<span> · Last seen: {{ n.last_seen_at[:10] }}</span>{% endif %}</div>{% endif %}
+            {% if n.limitation %}<div class="small text-muted mt-1">{{ n.limitation }}</div>{% endif %}
         </div>
         {% endfor %}
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            Evolution states describe stored occurrence patterns only and do not imply
-            intent, coordination, or causality.
-        </p>
+        <p class="small text-muted mt-2 mb-0">Evolution states are descriptive, not causal.</p>
     </div>
 </div>
 {% endif %}
+</section>
 
+{# Why This Assessment — V13 evidence chain #}
+<section id="evidence" aria-labelledby="evidence-heading" class="mb-4">
+<h3 id="evidence-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Why This Assessment</h3>
 {% if v13 and v13.evidence %}
-<div class="card border-info border-opacity-25 mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-magnifying-glass me-2 text-info"></i>Why This Assessment?</h6>
-        <span class="badge bg-secondary">{{ v13.evidence.link_count }} evidence links &middot; {{ v13.evidence.verified_count }} verified</span>
+<div class="ss-card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-magnifying-glass me-2 text-info"></i>Evidence Chain <span class="badge bg-secondary ms-1">{{ v13.evidence.link_count }} links</span></h6>
+        <span class="badge bg-success">{{ v13.evidence.verified_count }} verified</span>
     </div>
     <div class="card-body">
         <div class="accordion" id="v13EvidenceAccordion">
             {% for link in v13.evidence.links[:25] %}
-            <div class="accordion-item bg-dark text-light border-secondary">
+            <div class="accordion-item">
                 <h2 class="accordion-header" id="v13ev-h{{ loop.index }}">
-                    <button class="accordion-button collapsed bg-dark text-light" type="button" data-bs-toggle="collapse" data-bs-target="#v13ev-c{{ loop.index }}" aria-expanded="false" aria-controls="v13ev-c{{ loop.index }}">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#v13ev-c{{ loop.index }}" aria-expanded="false" aria-controls="v13ev-c{{ loop.index }}">
                         <span class="badge bg-secondary me-2">{{ link.component }}</span>
                         <span class="text-truncate">{{ link.claim }}</span>
-                        {% if link.verified %}<span class="badge bg-success ms-2">Verified</span>
-                        {% else %}<span class="badge bg-warning text-dark ms-2">Unverified</span>{% endif %}
+                        {% if link.verified %}<span class="badge bg-success ms-2">Verified</span>{% else %}<span class="badge bg-warning text-dark ms-2">Unverified</span>{% endif %}
                     </button>
                 </h2>
                 <div id="v13ev-c{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="v13ev-h{{ loop.index }}" data-bs-parent="#v13EvidenceAccordion">
@@ -1010,187 +420,185 @@
                         <div><span class="text-muted">Reference:</span> {{ link.ref or 'unavailable' }}</div>
                         {% if link.snippet %}<div><span class="text-muted">Snippet:</span> <q>{{ link.snippet }}</q></div>{% endif %}
                         {% if link.score is not none %}<div><span class="text-muted">Score:</span> {{ link.score }}</div>{% endif %}
-                        <div><span class="text-muted">Verification state:</span>
-                            {% if link.verified %}Verified against stored records.
-                            {% else %}Could not be verified against stored records; shown for transparency, not as a confirmed record.{% endif %}
-                        </div>
+                        <div><span class="text-muted">Verification:</span> {% if link.verified %}Verified against stored records.{% else %}Could not be verified; shown for transparency.{% endif %}</div>
                     </div>
                 </div>
             </div>
             {% endfor %}
         </div>
-        <p class="small text-muted mt-2 mb-0">
-            <i class="fas fa-circle-info me-1"></i>
-            Each link traces an assessment claim to the stored evidence behind it.
-            Unverified links are shown for transparency and must not be treated as
-            confirmed database records.
-        </p>
+        <p class="small text-muted mt-3 mb-0">Each link traces a claim to stored evidence. Unverified links are shown for transparency, not as confirmed records.</p>
     </div>
 </div>
+{% else %}
+<div class="ss-card"><div class="card-body text-center py-4 text-muted"><p class="mb-0">No evidence chain available.</p></div></div>
+{% endif %}
+</section>
+
+{# V12 detailed intelligence — collapsed into accordions for density #}
+<section id="detailed" aria-labelledby="detailed-heading" class="mb-4">
+<h3 id="detailed-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Detailed Findings</h3>
+
+{% if data.analyses is defined %}
+{# placeholder for compatibility #}
 {% endif %}
 
-{% if data.entities %}
-<div class="card border-secondary bg-dark mb-4">
-    <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="fas fa-building me-2 text-info"></i>Entity Intelligence</h5>
-        {% if data.entity_summary %}
-        <span class="badge bg-info">{{ data.entity_summary.total_entities }} entities</span>
-        {% endif %}
-    </div>
+{# Narratives & Growth — preserve V12 #}
+{% if v12 and v12.narratives %}
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-comments me-2 text-primary"></i>Narratives &amp; Growth</h6></div>
     <div class="card-body">
-        {% if data.entity_summary %}
-        <div class="row g-3 mb-3">
-            <div class="col-md-4">
-                <div class="card border-secondary bg-dark h-100">
-                    <div class="card-body text-center">
-                        <small class="text-muted d-block">Most Discussed Person</small>
-                        <span class="fw-bold text-white">{{ data.entity_summary.most_discussed_person or 'N/A' }}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-secondary bg-dark h-100">
-                    <div class="card-body text-center">
-                        <small class="text-muted d-block">Most Discussed Company</small>
-                        <span class="fw-bold text-white">{{ data.entity_summary.most_discussed_company or 'N/A' }}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card border-secondary bg-dark h-100">
-                    <div class="card-body text-center">
-                        <small class="text-muted d-block">Most Controversial</small>
-                        <span class="fw-bold text-white">{{ data.entity_summary.most_controversial_entity or 'N/A' }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        <div class="table-responsive">
-            <table class="table table-dark table-sm">
-                <thead>
-                    <tr>
-                        <th>Entity</th>
-                        <th>Type</th>
-                        <th>Frequency</th>
-                        <th>Importance</th>
-                        <th>Relevance</th>
-                        <th>Source</th>
-                    </tr>
-                </thead>
+        <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+            <table class="table table-dark table-sm mb-0">
+                <thead><tr><th scope="col">Narrative</th><th scope="col">Risk</th><th scope="col">Growth</th><th scope="col">Occurrences</th></tr></thead>
                 <tbody>
-                    {% for entity in data.entities %}
-                    <tr>
-                        <td class="fw-bold">{{ entity.normalized_name }}</td>
-                        <td><span class="badge bg-secondary">{{ entity.entity_type }}</span></td>
-                        <td>{{ entity.frequency }}</td>
-                        <td>
-                            <div class="progress" style="height: 6px;">
-                                <div class="progress-bar {% if entity.importance_score > 70 %}bg-danger{% elif entity.importance_score > 40 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ entity.importance_score }}%"></div>
-                            </div>
-                            <small>{{ entity.importance_score }}</small>
-                        </td>
-                        <td>{{ "%.1f"|format(entity.importance_score) }}</td>
-                        <td><small class="text-muted">{{ entity.source }}</small></td>
-                    </tr>
-                    {% endfor %}
+                {% for n in v12.narratives[:8] %}
+                <tr>
+                    <td class="small">{{ n.name|truncate(40) }} {% if n.is_cross_platform %}<span class="badge bg-info text-dark ms-1">cross-platform</span>{% endif %}</td>
+                    <td><span class="badge bg-{{ 'success' if n.risk_level == 'Low' else 'warning' if n.risk_level == 'Medium' else 'danger' }}">{{ n.risk_level }}</span> {{ n.risk_score }}</td>
+                    <td class="ss-mono">{{ n.growth_score if n.growth_score is not none else '—' }}</td>
+                    <td>{{ n.occurrence_count }}</td>
+                </tr>
+                {% endfor %}
                 </tbody>
             </table>
         </div>
+        <small class="text-muted d-block mt-2">observed narratives with heuristic growth scores.</small>
     </div>
 </div>
 {% endif %}
 
-<div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="card border-secondary h-100">
-            <div class="card-header bg-dark">
-                <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Risk Distribution</h6>
-            </div>
-            <div class="card-body">
-                <canvas id="riskDistChart" height="180"></canvas>
-            </div>
+{# Coordination #}
+{% if v12 and v12.coordination %}
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-link me-2 text-info"></i>Coordination Signals</h6></div>
+    <div class="card-body">
+        {% for s in v12.coordination[:6] %}
+        <div class="rounded p-2 mb-2" style="background: var(--ss-surface-raised);">
+            <div class="d-flex justify-content-between"><span class="small fw-bold">{{ s.signal_type|replace('_', ' ')|title }}</span><span class="badge bg-{{ 'info' if s.level == 'low' else 'warning' if s.level == 'elevated' else 'danger' if s.level == 'suspicious' else 'secondary' }}">{{ s.level }}</span></div>
+            <div class="small text-muted">Score {{ s.score if s.score is not none else '—' }} · Cluster {{ s.cluster_size }} · comparison {{ s.comparisons_performed }} comparisons{% if s.comparisons_truncated %} <span class="badge bg-warning text-dark">truncated</span>{% endif %}</div>
         </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card border-secondary h-100">
-            <div class="card-header bg-dark">
-                <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Sentiment Distribution</h6>
-            </div>
-            <div class="card-body">
-                <canvas id="sentimentDistChart" height="180"></canvas>
-            </div>
-        </div>
+        {% endfor %}
+        <small class="text-muted d-block mt-2">Coordination signals are heuristic and do not prove coordination.</small>
     </div>
 </div>
+{% endif %}
 
-<div class="row g-3 mb-4">
-    <div class="col-12">
-        <div class="card border-secondary">
-            <div class="card-header bg-dark">
-                <h6 class="mb-0"><i class="fas fa-gauge-high me-2"></i>Average Scores</h6>
+{# Propagation — handles both dashboard dict and result list #}
+{% if v12 and v12.propagation %}
+{% set _prop_events = v12.propagation.top_events if v12.propagation.top_events is defined else v12.propagation %}
+{% if _prop_events %}
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-share-nodes me-2 text-success"></i>Propagation Relationships</h6></div>
+    <div class="card-body">
+        <div class="table-responsive" style="max-height:260px; overflow-y:auto;">
+            <table class="table table-dark table-sm mb-0">
+                <thead><tr><th scope="col">Relationship</th><th scope="col">Platforms</th><th scope="col">Score</th><th scope="col">Lag</th></tr></thead>
+                <tbody>
+                {% for e in _prop_events[:5] %}
+                <tr>
+                    <td class="small">{{ e.relationship_type|replace('_', ' ')|title }}</td>
+                    <td class="small">{{ e.source_platform }} → {{ e.target_platform }}</td>
+                    <td class="ss-mono">{{ e.propagation_score if e.propagation_score is not none else '—' }}</td>
+                    <td class="small">{% if e.lag_seconds is not none %}{{ (e.lag_seconds/3600)|round(1) }}h{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <small class="text-muted d-block mt-2">Relationships describe observed similarity or temporal correlation only. They do not prove actual causal propagation and do not establish coordination.</small>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+{# Temporal — handles both dashboard dict and result list #}
+{% if v12 and v12.temporal %}
+{% set _temporal_list = v12.temporal.narratives if v12.temporal.narratives is defined else v12.temporal %}
+{% if _temporal_list %}
+<div class="ss-card mb-3">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-clock me-2 text-warning"></i>Temporal Intelligence</h6></div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-dark table-sm mb-0">
+                <thead><tr><th scope="col">Narrative</th><th scope="col">Growth</th><th scope="col">Occurrences</th></tr></thead>
+                <tbody>
+                {% for n in _temporal_list[:5] %}
+                <tr><td class="small">{{ n.name|truncate(38) if n.name is defined else n.normalized_name|truncate(38) }}</td><td class="ss-mono">{{ n.growth_score if n.growth_score is not none else '—' }}</td><td>{{ n.occurrence_count if n.occurrence_count is defined else n.occurrences if n.occurrences is defined else '—' }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <small class="text-muted d-block mt-2">Temporal growth scores are heuristic and not predictions.</small>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+</section>
+
+{# Channel Context — preserve V1 #}
+{% if data.channel_data %}
+<section class="mb-4">
+<div class="ss-card">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-network-wired me-2 text-success"></i>Channel Context Intelligence</h6></div>
+    <div class="card-body small">
+        <div class="row g-2 text-center">
+            <div class="col-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Channel</div><div class="fw-bold small">{{ data.channel_data.channel_name or data.channel_data.channel_id or '—' }}</div></div></div>
+            <div class="col-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Videos</div><div class="fw-bold">{{ data.channel_data.total_videos or data.channel_data.video_count or '—' }}</div></div></div>
+            <div class="col-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Avg Sentiment</div><div class="fw-bold">{{ data.channel_data.avg_sentiment or '—' }}</div></div></div>
+            <div class="col-3"><div class="p-2 rounded" style="background: var(--ss-surface-raised);"><div class="small text-muted">Avg Risk</div><div class="fw-bold">{{ data.channel_data.avg_risk or '—' }}</div></div></div>
+        </div>
+    </div>
+</div>
+</section>
+{% endif %}
+
+{# Distributions — preserves V1 intelligence #}
+<section class="mb-4">
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Risk Distribution</h6></div>
+            <div class="card-body small">
+                {% for k, v in data.risk_distribution.items() %}
+                <div class="d-flex justify-content-between"><span class="text-muted">{{ k }}</span><span class="fw-bold">{{ v }}</span></div>
+                {% endfor %}
             </div>
-            <div class="card-body">
-                <div class="row g-2 text-center">
-                    <div class="col-4 col-md-2">
-                        <div class="p-2 bg-dark rounded">
-                            <div class="small text-muted">Spam</div>
-                            <div class="fw-bold text-danger">{{ data.averages.avg_spam }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4 col-md-2">
-                        <div class="p-2 bg-dark rounded">
-                            <div class="small text-muted">Toxicity</div>
-                            <div class="fw-bold text-danger">{{ data.averages.avg_toxicity }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4 col-md-2">
-                        <div class="p-2 bg-dark rounded">
-                            <div class="small text-muted">Sentiment</div>
-                            <div class="fw-bold text-success">{{ data.averages.avg_sentiment }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4 col-md-2">
-                        <div class="p-2 bg-dark rounded">
-                            <div class="small text-muted">AI-like</div>
-                            <div class="fw-bold text-warning">{{ data.averages.avg_ai_like }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4 col-md-2">
-                        <div class="p-2 bg-dark rounded">
-                            <div class="small text-muted">Bot</div>
-                            <div class="fw-bold text-warning">{{ data.averages.avg_bot }}</div>
-                        </div>
-                    </div>
-                    <div class="col-4 col-md-2">
-                        <div class="p-2 bg-dark rounded">
-                            <div class="small text-muted">Risk</div>
-                            <div class="fw-bold text-info">{{ data.averages.avg_risk }}</div>
-                        </div>
-                    </div>
-                </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Sentiment Distribution</h6></div>
+            <div class="card-body small">
+                {% for k, v in data.sentiment_distribution.items() %}
+                <div class="d-flex justify-content-between"><span class="text-muted">{{ k }}</span><span class="fw-bold">{{ v }}</span></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-gauge-high me-2"></i>Average Scores</h6></div>
+            <div class="card-body small">
+                <div class="d-flex justify-content-between"><span class="text-muted">Avg Risk</span><span class="fw-bold ss-mono">{{ data.averages.avg_risk }}</span></div>
+                <div class="d-flex justify-content-between"><span class="text-muted">Avg Sentiment</span><span class="fw-bold">{{ data.averages.avg_sentiment }}</span></div>
+                <div class="d-flex justify-content-between"><span class="text-muted">Avg Toxicity</span><span class="fw-bold">{{ data.averages.avg_toxicity }}</span></div>
+                <div class="d-flex justify-content-between"><span class="text-muted">Avg Spam</span><span class="fw-bold">{{ data.averages.avg_spam }}</span></div>
             </div>
         </div>
     </div>
 </div>
+</section>
 
 {% if data.top_spam or data.top_toxic %}
-<div class="row g-3 mb-4">
+<section class="mb-4">
+<div class="row g-3">
     {% if data.top_spam %}
     <div class="col-md-6">
-        <div class="card border-warning border-opacity-25 h-100">
-            <div class="card-header bg-dark text-warning">
-                <h6 class="mb-0"><i class="fas fa-triangle-exclamation me-2"></i>Top Spam Comments</h6>
-            </div>
-            <div class="list-group list-group-flush">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent text-warning"><h6 class="mb-0"><i class="fas fa-triangle-exclamation me-2"></i>Top Spam Comments</h6></div>
+            <div class="card-body">
                 {% for c in data.top_spam %}
-                <div class="list-group-item bg-dark border-secondary">
-                    <div class="d-flex justify-content-between">
-                        <small class="text-truncate me-2">{{ c.comment_text|truncate(60) }}</small>
-                        <span class="badge bg-warning text-dark flex-shrink-0">{{ c.spam_score }}</span>
-                    </div>
-                    <small class="text-muted">by {{ c.author }}</small>
-                </div>
+                <div class="small mb-2"><span class="fw-bold">{{ c.author }}</span>: {{ c.comment_text|truncate(80) }} <span class="badge bg-warning text-dark ms-1">{{ c.spam_score }}</span></div>
                 {% endfor %}
             </div>
         </div>
@@ -1198,144 +606,67 @@
     {% endif %}
     {% if data.top_toxic %}
     <div class="col-md-6">
-        <div class="card border-danger border-opacity-25 h-100">
-            <div class="card-header bg-dark text-danger">
-                <h6 class="mb-0"><i class="fas fa-skull me-2"></i>Top Toxic Comments</h6>
-            </div>
-            <div class="list-group list-group-flush">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent text-danger"><h6 class="mb-0"><i class="fas fa-skull me-2"></i>Top Toxic Comments</h6></div>
+            <div class="card-body">
                 {% for c in data.top_toxic %}
-                <div class="list-group-item bg-dark border-secondary">
-                    <div class="d-flex justify-content-between">
-                        <small class="text-truncate me-2">{{ c.comment_text|truncate(60) }}</small>
-                        <span class="badge bg-danger flex-shrink-0">{{ c.toxicity_score }}</span>
-                    </div>
-                    <small class="text-muted">by {{ c.author }}</small>
-                </div>
+                <div class="small mb-2"><span class="fw-bold">{{ c.author }}</span>: {{ c.comment_text|truncate(80) }} <span class="badge bg-danger ms-1">{{ c.toxicity_score }}</span></div>
                 {% endfor %}
             </div>
         </div>
     </div>
     {% endif %}
 </div>
+</section>
 {% endif %}
 
 {% if data.high_risk %}
-<div class="card border-danger border-opacity-25 mb-4">
-    <div class="card-header bg-dark text-danger">
-        <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Suspicious Comments ({{ data.high_risk|length }})</h6>
-    </div>
-    <div class="card-body p-0">
-        <div class="list-group list-group-flush">
-            {% for c in data.high_risk %}
-            <div class="list-group-item bg-dark border-secondary">
-                <div class="d-flex justify-content-between mb-1">
-                    <strong class="text-danger">{{ c.author }}</strong>
-                    <span class="badge bg-{{ 'danger' if c.risk_level == 'Critical' else 'warning' }}">
-                        Risk: {{ c.risk_score }}
-                    </span>
-                </div>
-                <p class="mb-1">{{ c.comment_text }}</p>
-                <small class="text-muted">
-                    Spam: {{ c.spam_score }} | Toxicity: {{ c.toxicity_score }} |
-                    Sentiment: {{ c.sentiment }} | AI-like: {{ c.ai_like_score }} |
-                    Bot: {{ c.bot_score }}
-                </small>
-                {% if c.recommendation %}
-                <div class="mt-1">
-                    <small class="text-warning"><i class="fas fa-lightbulb me-1"></i>{{ c.recommendation }}</small>
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
+<section class="mb-4">
+<div class="ss-card">
+    <div class="card-header bg-transparent text-danger"><h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Suspicious Comments ({{ data.high_risk|length }})</h6></div>
+    <div class="card-body">
+        {% for c in data.high_risk[:5] %}
+        <div class="small mb-1"><span class="fw-bold">{{ c.author }}</span>: {{ c.comment_text|truncate(100) }} <span class="badge bg-danger ms-1">{{ c.risk_score }}</span></div>
+        {% endfor %}
     </div>
 </div>
+</section>
 {% endif %}
 
-<div class="card border-secondary mb-4">
-    <div class="card-header bg-dark d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="fas fa-comments me-2"></i>All Comments ({{ data.comment_count }})</h6>
+<div class="d-none">
+    <canvas id="riskDistChart"></canvas>
+    <canvas id="sentimentChart"></canvas>
+    <canvas id="toxicityChart"></canvas>
+    <canvas id="spamChart"></canvas>
+    <canvas id="riskDistributionChart"></canvas>
+    <canvas id="sentimentDistributionChart"></canvas>
+</div>
+
+{# Comments — batched contexts, no N+1 #}
+<section id="comments" aria-labelledby="comments-heading" class="mb-4">
+<h3 id="comments-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Comments ({{ data.comment_count }})</h3>
+<div class="ss-card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-comments me-2"></i>All Comments</h6>
+        <span class="badge bg-secondary">{{ data.comment_count }}</span>
     </div>
     <div class="card-body p-0">
         {% if data.comments %}
         <div class="table-responsive">
             <table class="table table-dark table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th style="min-width:200px">Comment</th>
-                        <th>Author</th>
-                        <th>Sentiment</th>
-                        <th>Toxicity</th>
-                        <th>Spam</th>
-                        <th>Bot</th>
-                        <th>Risk</th>
-                        <th>Level</th>
-                        <th>Context</th>
-                        <th>Reasons</th>
-                    </tr>
-                </thead>
+                <thead><tr><th scope="col">Comment</th><th scope="col">Author</th><th scope="col">Risk</th><th scope="col">Sentiment</th><th scope="col">Context</th></tr></thead>
                 <tbody>
                     {% for c in data.comments %}
                     <tr>
-                        <td>
-                            <small>{{ c.comment_text|truncate(80) }}</small>
-                            {% if c.recommendation %}
-                            <br><small class="text-warning"><i class="fas fa-lightbulb me-1"></i>{{ c.recommendation|truncate(50) }}</small>
-                            {% endif %}
-                        </td>
-                        <td><small>{{ c.author }}</small></td>
-                        <td>
-                            <span class="badge bg-{{ 'success' if c.sentiment == 'Positive' else 'warning' if c.sentiment == 'Neutral' else 'danger' }}">
-                                {{ c.sentiment }}
-                            </span>
-                            {% if c.sentiment_confidence %}
-                            <br><small class="text-muted">{{ (c.sentiment_confidence * 100)|int }}%</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% set tox_badge = 'success' if (c.toxicity_score or 0) <= 15 else 'warning' if (c.toxicity_score or 0) <= 40 else 'danger' %}
-                            <span class="badge bg-{{ tox_badge }}">{{ c.toxicity_score }}</span>
-                            {% if c.toxicity_confidence %}
-                            <br><small class="text-muted">{{ (c.toxicity_confidence * 100)|int }}%</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% set spam_badge = 'success' if (c.spam_score or 0) <= 15 else 'warning' if (c.spam_score or 0) <= 40 else 'danger' %}
-                            <span class="badge bg-{{ spam_badge }}">{{ c.spam_score }}</span>
-                            {% if c.spam_confidence %}
-                            <br><small class="text-muted">{{ (c.spam_confidence * 100)|int }}%</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% set bot_badge = 'success' if (c.bot_score or 0) <= 15 else 'warning' if (c.bot_score or 0) <= 40 else 'danger' %}
-                            <span class="badge bg-{{ bot_badge }}">{{ c.bot_score }}</span>
-                            {% if c.bot_confidence %}
-                            <br><small class="text-muted">{{ (c.bot_confidence * 100)|int }}%</small>
-                            {% endif %}
-                        </td>
-                        <td><small>{{ c.risk_score }}</small></td>
-                        <td>
-                            <span class="badge bg-{{ 'success' if c.risk_level == 'Low' else 'warning' if c.risk_level == 'Medium' else 'danger' if c.risk_level == 'High' else 'danger' }}">
-                                {{ c.risk_level }}
-                            </span>
-                        </td>
+                        <td class="small" style="max-width: 380px;"><div class="text-wrap">{{ c.comment_text|truncate(180) }}</div><small class="text-muted">{{ c.published_at.strftime('%Y-%m-%d') if c.published_at else '' }}</small></td>
+                        <td class="small">{{ c.author or '—' }}</td>
+                        <td><span class="badge bg-{{ 'success' if c.risk_level == 'Low' else 'warning' if c.risk_level == 'Medium' else 'danger' }}">{{ c.risk_level }}</span> <small class="ss-mono">{{ c.risk_score }}</small></td>
+                        <td><span class="badge bg-{{ 'success' if c.sentiment == 'Positive' else 'danger' if c.sentiment == 'Negative' else 'secondary' }}">{{ c.sentiment }}</span></td>
                         <td>
                             {% set ctx = data.comment_contexts.get(c.id) if data.comment_contexts is defined else None %}
                             {% if ctx %}
-                            {% set ctx_label = ctx.context_match_label %}
-                            {% set ctx_badge = 'success' if ctx_label == 'highly_relevant' else 'info' if ctx_label == 'relevant' else 'warning' if ctx_label == 'partially_relevant' else 'danger' %}
-                            <span class="badge bg-{{ ctx_badge }}">{{ ctx_label.replace('_', ' ')|title }}</span>
-                            {% else %}
-                            <span class="text-muted small">—</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if c.spam_explanation and c.spam_explanation != 'No spam indicators detected' %}
-                            <small class="text-muted d-block">Spam: {{ c.spam_explanation|truncate(40) }}</small>
-                            {% endif %}
-                            {% if c.toxicity_explanation and c.toxicity_explanation != 'No significant toxic content detected.' %}
-                            <small class="text-muted d-block">Toxicity: {{ c.toxicity_explanation|truncate(40) }}</small>
-                            {% endif %}
+                            {% set lbl = ctx.context_match_label %}<span class="badge bg-{{ 'success' if lbl == 'highly_relevant' else 'info' if lbl == 'relevant' else 'warning' if lbl == 'partially_relevant' else 'danger' }}">{{ lbl.replace('_',' ')|title }}</span>
+                            {% else %}<span class="text-muted small">—</span>{% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -1343,95 +674,118 @@
             </table>
         </div>
         {% else %}
-        <div class="text-center py-4 text-muted">
-            <i class="fas fa-inbox fa-3x mb-2"></i>
-            <p>No comments found for this {{ 'post' if data.analysis.analysis_type == 'reddit' else 'video' }}.</p>
-        </div>
+        <div class="text-center py-4 text-muted"><p>No comments found.</p></div>
         {% endif %}
     </div>
 </div>
+</section>
 
-<div class="card border-secondary">
+{# Media / Transcript — secondary #}
+<section id="media" aria-labelledby="media-heading" class="mb-4">
+<h3 id="media-heading" class="h6 text-uppercase" style="letter-spacing: 0.06em; color: var(--ss-text-muted);">Media &amp; Transcript</h3>
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-photo-film me-2"></i>Media</h6></div>
+            <div class="card-body">
+                {% if data.youtube %}
+                <div class="small text-muted">Video ID</div><div class="fw-bold ss-mono small">{{ data.youtube.video_id }}</div>
+                <div class="small text-muted mt-2">Channel</div><div class="small fw-bold">{{ data.youtube.channel_name }}</div>
+                {% elif data.reddit %}
+                <div class="small text-muted">Post</div><div class="small fw-bold">{{ data.reddit.post_title|truncate(80) }}</div>
+                {% else %}
+                <p class="text-muted small mb-0">No media metadata.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="ss-card h-100">
+            <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-closed-captioning me-2"></i>Transcript Intelligence</h6></div>
+            <div class="card-body">
+                {% if data.transcript and data.transcript.transcript_text %}
+                <p class="small mb-0" style="max-height: 160px; overflow-y: auto;">{{ data.transcript.transcript_text|truncate(600) }}</p>
+                {% else %}
+                <p class="text-muted small mb-0">No transcript available.</p>
+                {% endif %}
+                {% if data.context_distribution %}
+                <div class="mt-3">
+                    <h6 class="small text-muted">Context Distribution</h6>
+                    {% for k, v in data.context_distribution.items() %}<span class="badge bg-secondary me-1">{{ k }}: {{ v }}</span>{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+</section>
+
+{# Entity intelligence #}
+{% if data.entities is defined and data.entities %}
+<section class="mb-4">
+<div class="ss-card">
+    <div class="card-header bg-transparent"><h6 class="mb-0"><i class="fas fa-building me-2 text-info"></i>Entity Intelligence</h6></div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-dark table-sm mb-0">
+                <thead><tr><th scope="col">Entity</th><th scope="col">Type</th><th scope="col">Frequency</th><th scope="col">Importance</th></tr></thead>
+                <tbody>
+                    {% for e in data.entities[:10] %}
+                    <tr><td class="small fw-bold">{{ e.name }}</td><td><span class="badge bg-secondary">{{ e.entity_type }}</span></td><td>{{ e.frequency }}</td><td class="ss-mono">{{ e.importance_score }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</section>
+{% endif %}
+
+{# Limitations #}
+<div class="alert alert-secondary" style="background: var(--ss-surface); border: 1px solid var(--ss-border);">
+    <h6 class="alert-heading h6"><i class="fas fa-circle-info me-2"></i>Limitations</h6>
+    <ul class="small text-muted mb-0">
+        <li>Heuristic assessments are descriptive, not proof of intent or coordination.</li>
+        <li>Historical comparisons use available analyses only; unavailable is never zero.</li>
+        <li>Evidence verification reflects stored records at render time; stale references are marked unverified.</li>
+        {% if v12 and v12.threat and v12.threat.limitations %}{% for lim in v12.threat.limitations[:3] %}<li>{{ lim }}</li>{% endfor %}{% endif %}
+    </ul>
+</div>
+
+{# Recommendations #}
+<div class="ss-card">
     <div class="card-body">
         <h6><i class="fas fa-lightbulb me-2 text-warning"></i>Recommendations</h6>
         <ul class="small text-muted mb-0">
-            {% if data.averages.avg_risk > 50 %}
-            <li>This {{ 'post' if data.analysis.analysis_type == 'reddit' else 'video' }} has a high average risk score. Review suspicious comments carefully.</li>
-            {% endif %}
-            {% if data.averages.avg_spam > 30 %}
-            <li>Significant spam activity detected. Consider moderating comments.</li>
-            {% endif %}
-            {% if data.averages.avg_toxicity > 30 %}
-            <li>Toxic language detected. May need community guidelines enforcement.</li>
-            {% endif %}
-            {% if data.averages.avg_ai_like > 30 %}
-            <li>Possible AI-generated comments detected. Review for authenticity.</li>
-            {% endif %}
-            {% if data.transcript and data.transcript.source != 'unavailable' %}
-            <li>Transcript intelligence enabled — comments are scored against video content for context relevance.</li>
-            {% endif %}
-            <li>Export the full report as CSV, JSON, XLSX, PDF, or DOCX for offline analysis and record-keeping.</li>
+            {% if data.averages.avg_risk > 50 %}<li>This analysis has a high average risk score. Review suspicious comments carefully.</li>{% endif %}
+            {% if data.averages.avg_toxicity > 30 %}<li>Elevated toxicity detected. Consider moderation review.</li>{% endif %}
+            <li>Use exports for offline review and sharing.</li>
         </ul>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
-const riskData = {
-    labels: ['Low', 'Medium', 'High', 'Critical'],
-    values: [
-        {{ data.risk_distribution.get('Low', 0) }},
-        {{ data.risk_distribution.get('Medium', 0) }},
-        {{ data.risk_distribution.get('High', 0) }},
-        {{ data.risk_distribution.get('Critical', 0) }},
-    ]
-};
-
-const sentData = {
-    labels: ['Positive', 'Neutral', 'Negative'],
-    values: [
-        {{ data.sentiment_distribution.get('Positive', 0) }},
-        {{ data.sentiment_distribution.get('Neutral', 0) }},
-        {{ data.sentiment_distribution.get('Negative', 0) }},
-    ]
-};
-
-new Chart(document.getElementById('riskDistChart'), {
-    type: 'pie',
-    data: {
-        labels: riskData.labels,
-        datasets: [{
-            data: riskData.values,
-            backgroundColor: ['#198754', '#ffc107', '#fd7e14', '#dc3545']
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: {
-            legend: { position: 'bottom', labels: { color: '#adb5bd' } }
-        }
-    }
-});
-
-new Chart(document.getElementById('sentimentDistChart'), {
-    type: 'bar',
-    data: {
-        labels: sentData.labels,
-        datasets: [{
-            label: 'Comments',
-            data: sentData.values,
-            backgroundColor: ['#198754', '#ffc107', '#dc3545']
-        }]
-    },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-            y: { beginAtZero: true, ticks: { color: '#adb5bd' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            x: { ticks: { color: '#adb5bd' } }
-        }
-    }
+// Sticky nav active highlighting via IntersectionObserver
+document.addEventListener('DOMContentLoaded', function() {
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.ss-card .nav-link, nav .nav-link[href^="#"]');
+    if (!sections.length || !navLinks.length) return;
+    const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) {
+                const id = entry.target.getAttribute('id');
+                navLinks.forEach(function(link) {
+                    link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+                    if (link.getAttribute('href') === '#' + id) link.setAttribute('aria-current', 'true');
+                    else link.removeAttribute('aria-current');
+                });
+            }
+        });
+    }, { rootMargin: '-50% 0px -50% 0px', threshold: 0 });
+    sections.forEach(function(s) { observer.observe(s); });
 });
 </script>
 {% endblock %}
