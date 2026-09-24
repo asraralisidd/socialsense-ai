@@ -21,8 +21,19 @@ class ActivityLogRepository(BaseRepository):
         db.session.commit()
         return entry
 
-    def get_user_activity(self, user_id, limit=100):
-        return self.model.query.filter_by(user_id=user_id).order_by(ActivityLog.created_at.desc()).limit(limit).all()
+    def get_user_activity(self, user_id, limit=100, offset=0):
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        return self.model.query.filter_by(user_id=user_id).order_by(ActivityLog.created_at.desc(), ActivityLog.id.desc()).limit(limit).offset(offset).all()
+
+    def count_user_activity(self, user_id):
+        return self.model.query.filter_by(user_id=user_id).count()
 
     def delete_old_logs(self, days=30):
         cutoff = _now() - timedelta(days=days)

@@ -12,11 +12,25 @@ class ScheduledReportRepository(BaseRepository):
     def __init__(self):
         super().__init__(ScheduledReport)
 
-    def get_user_reports(self, user_id, include_inactive=False):
+    def get_user_reports(self, user_id, include_inactive=False, limit=20, offset=0):
+        try:
+            limit = max(1, min(int(limit), 50))
+        except (TypeError, ValueError):
+            limit = 20
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
         q = self.model.query.filter_by(user_id=user_id)
         if not include_inactive:
             q = q.filter_by(is_active=True)
-        return q.order_by(ScheduledReport.next_run_at.asc()).all()
+        return q.order_by(ScheduledReport.next_run_at.asc(), ScheduledReport.id.desc()).limit(limit).offset(offset).all()
+
+    def count_user_reports(self, user_id, include_inactive=False):
+        q = self.model.query.filter_by(user_id=user_id)
+        if not include_inactive:
+            q = q.filter_by(is_active=True)
+        return q.count()
 
     def get_due_reports(self, limit=None):
         """Due reports oldest-first, with an optional SQL-level batch cap.

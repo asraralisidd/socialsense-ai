@@ -98,6 +98,15 @@ class JobRepository(BaseRepository):
     def count_by_user_and_status(self, user_id, status):
         return self.model.query.filter_by(user_id=user_id, status=status).count()
 
+    def count_jobs_for_user(self, user_id, status=None):
+        q = self.model.query.filter_by(user_id=user_id)
+        if status:
+            if isinstance(status, list):
+                q = q.filter(Job.status.in_(status))
+            else:
+                q = q.filter_by(status=status)
+        return q.count()
+
     def count_all_by_status(self, status):
         return self.model.query.filter_by(status=status).count()
 

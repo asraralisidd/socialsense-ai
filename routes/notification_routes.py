@@ -10,9 +10,16 @@ notification_service = NotificationService()
 @notification_bp.route('/')
 @login_required
 def list_notifications():
-    notifications = notification_service.get_user_notifications(current_user.id)
+    page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
+    limit = 20
+    offset = (page - 1) * limit
+    notifications = notification_service.get_user_notifications(current_user.id, limit=limit, offset=offset)
+    total = notification_service.count_user_notifications(current_user.id)
+    total_pages = (total + limit - 1) // limit if total else 1
     unread = notification_service.get_unread_count(current_user.id)
-    return render_template('notifications/list.html', notifications=notifications, unread_count=unread)
+    return render_template('notifications/list.html', notifications=notifications, unread_count=unread, page=page, total_pages=total_pages, total=total)
 
 
 @notification_bp.route('/<int:notification_id>/read', methods=['POST'])

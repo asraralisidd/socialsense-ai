@@ -1320,8 +1320,9 @@
                             </span>
                         </td>
                         <td>
-                            {% if c.context %}
-                            {% set ctx_label = c.context.context_match_label %}
+                            {% set ctx = data.comment_contexts.get(c.id) if data.comment_contexts is defined else None %}
+                            {% if ctx %}
+                            {% set ctx_label = ctx.context_match_label %}
                             {% set ctx_badge = 'success' if ctx_label == 'highly_relevant' else 'info' if ctx_label == 'relevant' else 'warning' if ctx_label == 'partially_relevant' else 'danger' %}
                             <span class="badge bg-{{ ctx_badge }}">{{ ctx_label.replace('_', ' ')|title }}</span>
                             {% else %}

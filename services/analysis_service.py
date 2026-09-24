@@ -916,9 +916,21 @@ class AnalysisService:
                     db.session.rollback()
                     current_app.logger.warning(f'Context intelligence lookup failed: {e}')
 
+        # Batch-load comment contexts for template (no per-row lazy load)
+        comment_contexts = {}
+        if comments:
+            try:
+                cc_rows = CommentContext.query.filter(
+                    CommentContext.comment_result_id.in_([c.id for c in comments])
+                ).all()
+                comment_contexts = {r.comment_result_id: r for r in cc_rows}
+            except Exception:
+                comment_contexts = {}
+
         result = {
             'analysis': analysis,
             'comments': comments,
+            'comment_contexts': comment_contexts,
             'high_risk': high_risk,
             'top_spam': top_spam,
             'top_toxic': top_toxic,
@@ -1143,7 +1155,7 @@ class AnalysisService:
             'entity_risk_count': entity_risk_count,
         }
 
-    def get_all_user_analyses_with_data(self, user_id, limit=None):
+    def get_all_user_analyses_with_data(self, user_id, limit=None, offset=None):
         """Bounded per-analysis summaries for history/dashboard lists.
 
         The row cap is applied in SQL (never load-all-then-slice) and all
@@ -1154,7 +1166,7 @@ class AnalysisService:
         from sqlalchemy import func
         from models.video_transcript import VideoTranscript as _VideoTranscript
 
-        analyses = self.analysis_repo.get_by_user_id(user_id, limit=limit)
+        analyses = self.analysis_repo.get_by_user_id(user_id, limit=limit, offset=offset)
         aids = [a.id for a in analyses]
         if not aids:
             return []

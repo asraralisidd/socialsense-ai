@@ -19,8 +19,27 @@ class JobLogRepository(BaseRepository):
         db.session.commit()
         return log
 
-    def get_logs(self, job_id, limit=100):
-        return self.model.query.filter_by(job_id=job_id).order_by(JobLog.timestamp.asc()).limit(limit).all()
+    def get_logs(self, job_id, limit=100, offset=0):
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        return self.model.query.filter_by(job_id=job_id).order_by(JobLog.timestamp.asc(), JobLog.id.asc()).limit(limit).offset(offset).all()
 
-    def get_logs_by_level(self, job_id, level):
-        return self.model.query.filter_by(job_id=job_id, level=level).order_by(JobLog.timestamp.asc()).all()
+    def count_logs(self, job_id):
+        return self.model.query.filter_by(job_id=job_id).count()
+
+    def get_logs_by_level(self, job_id, level, limit=100, offset=0):
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        return self.model.query.filter_by(job_id=job_id, level=level).order_by(JobLog.timestamp.asc(), JobLog.id.asc()).limit(limit).offset(offset).all()

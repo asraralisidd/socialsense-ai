@@ -40,5 +40,18 @@
     {% else %}
     <div class="text-center py-4 text-muted"><p>No notifications yet.</p></div>
     {% endif %}
+    {% if total_pages is defined and total_pages > 1 %}
+    <nav aria-label="Notifications pagination" class="mt-3">
+        <ul class="pagination justify-content-center mb-0">
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('notifications.list_notifications', page=page-1) if page > 1 else '#' }}">Previous</a>
+            </li>
+            <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
+            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('notifications.list_notifications', page=page+1) if page < total_pages else '#' }}">Next</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
 </div></div>
 {% endblock %}

@@ -120,11 +120,17 @@ class JobService:
 
         return {'success': True, 'job_id': job.id}
 
-    def get_job_logs(self, job_id, user_id=None):
+    def get_job_logs(self, job_id, user_id=None, limit=100, offset=0):
         job = self.get_job(job_id, user_id)
         if not job:
             return None
-        return self.log_repo.get_logs(job_id)
+        return self.log_repo.get_logs(job_id, limit=limit, offset=offset)
+
+    def count_job_logs(self, job_id, user_id=None):
+        job = self.get_job(job_id, user_id)
+        if not job:
+            return 0
+        return self.log_repo.count_logs(job_id)
 
     def get_dashboard_metrics(self, user_id):
         return {

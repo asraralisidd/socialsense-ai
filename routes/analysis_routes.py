@@ -97,8 +97,15 @@ def result(analysis_id):
 @analysis_bp.route('/history')
 @login_required
 def history():
-    analyses = analysis_service.get_all_user_analyses_with_data(current_user.id)
-    return render_template('analysis/history.html', analyses=analyses)
+    page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
+    limit = 20
+    offset = (page - 1) * limit
+    analyses = analysis_service.get_all_user_analyses_with_data(current_user.id, limit=limit, offset=offset)
+    total = analysis_service.analysis_repo.count_by_user(current_user.id)
+    total_pages = (total + limit - 1) // limit if total else 1
+    return render_template('analysis/history.html', analyses=analyses, page=page, total_pages=total_pages, total=total)
 
 
 @analysis_bp.route('/<int:analysis_id>/delete', methods=['POST'])

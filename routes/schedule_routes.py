@@ -10,8 +10,15 @@ scheduler_service = SchedulerService()
 @schedule_bp.route('/')
 @login_required
 def list_schedules():
-    schedules = scheduler_service.schedule_repo.get_user_schedules(current_user.id, include_inactive=True)
-    return render_template('schedules/list.html', schedules=schedules)
+    page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
+    limit = 20
+    offset = (page - 1) * limit
+    schedules = scheduler_service.schedule_repo.get_user_schedules(current_user.id, include_inactive=True, limit=limit, offset=offset)
+    total = scheduler_service.schedule_repo.count_user_schedules(current_user.id, include_inactive=True)
+    total_pages = (total + limit - 1) // limit if total else 1
+    return render_template('schedules/list.html', schedules=schedules, page=page, total_pages=total_pages, total=total)
 
 
 @schedule_bp.route('/create', methods=['GET', 'POST'])
