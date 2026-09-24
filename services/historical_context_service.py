@@ -115,43 +115,58 @@ class HistoricalContextService:
     # ------------------------------------------------------------- baseline
 
     def compute_baseline(self, user_id, current_analysis_id=None,
-                         window_days=None, max_analyses=None):
+                         window_days=None, max_analyses=None, prefetch=None):
         """Bounded per-metric baseline comparison for one user.
 
         Returns ``{'available', 'metrics': {name: {...}}, ...}`` where each
         metric entry is ``{metric, current, baseline, deviation,
         sample_size, window_days, availability}``.
+
+        ``prefetch`` (from :meth:`build_prefetch`) supplies already-loaded
+        rows so repeated builds within one request issue no new queries;
+        when omitted the data is loaded here exactly as before.
         """
         if not self._cfg(self.ENABLE_KEY, True):
             return self._unavailable('V13 historical baseline is disabled by configuration.')
         if user_id is None:
             return self._unavailable('No user provided; baseline cannot be computed.')
 
-        window = window_days if window_days else self._window_days()
-        limit = max_analyses if max_analyses else self._max_analyses()
-        minimum = self._min_sample()
-        try:
-            window = max(1, int(window))
-            limit = max(1, min(int(limit), 500))
-        except (TypeError, ValueError):
-            return self._unavailable('Invalid baseline bounds provided.')
+        if prefetch is not None:
+            window = prefetch['window']
+            minimum = prefetch['minimum']
+            past_ids = prefetch['past_ids']
+            series = prefetch['series']
+            pairs = {
+                name: (entry['current'][1],
+                       [value for _, value, _ in entry['history']])
+                for name, entry in series.items()
+            }
+        else:
+            window = window_days if window_days else self._window_days()
+            limit = max_analyses if max_analyses else self._max_analyses()
+            minimum = self._min_sample()
+            try:
+                window = max(1, int(window))
+                limit = max(1, min(int(limit), 500))
+            except (TypeError, ValueError):
+                return self._unavailable('Invalid baseline bounds provided.')
 
-        from datetime import timedelta
-        since = _now() - timedelta(days=window)
-        try:
-            past = self.temporal_repo.get_user_analyses_in_window(
-                user_id, since=since,
-                exclude_analysis_id=current_analysis_id, limit=limit)
-            past_ids = [a.id for a in past if getattr(a, 'id', None) is not None]
-            series = self._collect_series(user_id, past_ids, current_analysis_id)
-        except Exception as exc:
-            db.session.rollback()
-            logger.warning(f'V13 baseline query failed: {exc}')
-            return self._unavailable('Historical baseline queries failed; rolled back.')
+            from datetime import timedelta
+            since = _now() - timedelta(days=window)
+            try:
+                past = self.temporal_repo.get_user_analyses_in_window(
+                    user_id, since=since,
+                    exclude_analysis_id=current_analysis_id, limit=limit)
+                past_ids = [a.id for a in past if getattr(a, 'id', None) is not None]
+                pairs = self._collect_series(user_id, past_ids, current_analysis_id)
+            except Exception as exc:
+                db.session.rollback()
+                logger.warning(f'V13 baseline query failed: {exc}')
+                return self._unavailable('Historical baseline queries failed; rolled back.')
 
         metrics = {}
         for name in self.METRICS:
-            current, history = series.get(name, (None, []))
+            current, history = pairs.get(name, (None, []))
             metrics[name] = self._compare(name, current, history, minimum, window)
         return {
             'available': True,
@@ -165,6 +180,44 @@ class HistoricalContextService:
             'metrics': metrics,
             'disclaimer': self.DISCLAIMER,
         }
+
+    # ------------------------------------------------------------- prefetch
+
+    def build_prefetch(self, user_id, current_analysis_id=None,
+                       window_days=None, max_analyses=None):
+        """Load once, reuse across baseline/comparison/evidence reads.
+
+        Returns a request-local dict ``{window, limit, minimum, past_ids,
+        series, threat_row}`` or ``None`` when loading fails (callers then
+        fall back to per-section queries, exactly as before). The dict is
+        plain local state: never cached across requests or users.
+        """
+        try:
+            window = window_days if window_days else self._window_days()
+            limit = max_analyses if max_analyses else self._max_analyses()
+            minimum = self._min_sample()
+            window = max(1, int(window))
+            limit = max(1, min(int(limit), 500))
+            from datetime import timedelta
+            since = _now() - timedelta(days=window)
+            past = self.temporal_repo.get_user_analyses_in_window(
+                user_id, since=since,
+                exclude_analysis_id=current_analysis_id, limit=limit)
+            past_ids = [a.id for a in past
+                        if getattr(a, 'id', None) is not None]
+            series = self.get_metric_series(user_id, past_ids,
+                                            current_analysis_id)
+            threat_row = None
+            if current_analysis_id is not None:
+                threat_row = self.threat_repo.get_for_analysis(
+                    current_analysis_id)
+        except Exception as exc:
+            db.session.rollback()
+            logger.warning(f'V13 prefetch failed: {exc}')
+            return None
+        return {'window': window, 'limit': limit, 'minimum': minimum,
+                'past_ids': past_ids, 'series': series,
+                'threat_row': threat_row}
 
     # -------------------------------------------------------------- series
 

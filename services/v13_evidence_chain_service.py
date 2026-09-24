@@ -144,13 +144,21 @@ class V13EvidenceChainService:
 
     # ------------------------------------------------------------ read API
 
-    def get_analysis_evidence_chain(self, analysis_id):
-        """Read-only: reconstruct the chain from the DB with verification."""
-        assessment = self.threat_repo.get_for_analysis(analysis_id)
+    def get_analysis_evidence_chain(self, analysis_id, assessment=None):
+        """Read-only: reconstruct the chain from the DB with verification.
+
+        ``assessment`` is the already-loaded ThreatAssessment row when the
+        caller has it (request-local reuse); otherwise it is re-fetched
+        exactly as before. Verification batches lookups by source table
+        so up to 25 links are checked in at most a handful of queries
+        instead of one per link. Preserves every output field.
+        """
+        if assessment is None:
+            assessment = self.threat_repo.get_for_analysis(analysis_id)
         if assessment is None or not assessment.evidence_refs:
             return None
         stored = assessment.evidence_refs if isinstance(assessment.evidence_refs, list) else []
-        links = [self._reverify(link) for link in stored if isinstance(link, dict)]
+        links = self._reverify_batch(stored)
         verified = sum(1 for link in links if link.get('verified'))
         return {
             'available': True,
@@ -405,6 +413,40 @@ class V13EvidenceChainService:
                 verified = False
         out = dict(link)
         out['verified'] = verified
+        return out
+
+    def _reverify_batch(self, stored):
+        """Batch verification: one IN per source table, then order preserved.
+
+        Every stored link reappears exactly once with an updated
+        ``verified`` flag; output order of the stored list is preserved
+        so link ordering stays deterministic.
+        """
+        ordered = [link for link in stored if isinstance(link, dict)]
+        by_table = {}
+        for link in ordered:
+            table = link.get('source_table')
+            sid = link.get('source_id')
+            if table in _SOURCE_MODELS and isinstance(sid, int):
+                by_table.setdefault(table, set()).add(sid)
+        existing = {table: set() for table in by_table}
+        for table, ids in by_table.items():
+            try:
+                rows = db.session.query(_SOURCE_MODELS[table].id).filter(
+                    _SOURCE_MODELS[table].id.in_(sorted(ids))).all()
+                existing[table] = {row.id for row in rows}
+            except SQLAlchemyError:
+                existing[table] = set()
+        out = []
+        for link in ordered:
+            table = link.get('source_table')
+            sid = link.get('source_id')
+            verified = False
+            if table in _SOURCE_MODELS and isinstance(sid, int):
+                verified = sid in existing.get(table, set())
+            item = dict(link)
+            item['verified'] = verified
+            out.append(item)
         return out
 
     def _component_rank(self, component):

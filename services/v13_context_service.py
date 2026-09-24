@@ -26,16 +26,31 @@ V13_DISCLAIMER = (
 
 
 def build_v13_context(analysis_id, user_id):
-    """Bounded read-only V13 context for one analysis (same user scope)."""
+    """Bounded read-only V13 context for one analysis (same user scope).
+
+    A single request-local prefetch supplies the threat row, metric series,
+    and history ids once; baseline, comparison, and evidence reuse that
+    prefetch with zero duplicate reads. Fallback to per-section queries
+    on prefetch failure, exactly as before.
+    """
     context = {'baseline': None, 'comparison': None,
                'evolution': None, 'evidence': None}
     if analysis_id is None or user_id is None:
         return context
 
+    prefetch = None
+    try:
+        from services.historical_context_service import HistoricalContextService
+        prefetch = HistoricalContextService().build_prefetch(
+            user_id, current_analysis_id=analysis_id)
+    except Exception as exc:
+        logger.warning(f'V13 prefetch failed: {exc}')
+        prefetch = None
+
     try:
         from services.historical_context_service import HistoricalContextService
         result = HistoricalContextService().compute_baseline(
-            user_id, current_analysis_id=analysis_id)
+            user_id, current_analysis_id=analysis_id, prefetch=prefetch)
         if isinstance(result, dict) and result.get('available'):
             context['baseline'] = result
     except Exception as exc:
@@ -44,7 +59,7 @@ def build_v13_context(analysis_id, user_id):
     try:
         from services.cross_analysis_service import CrossAnalysisService
         svc = CrossAnalysisService()
-        result = svc.compare_with_history(user_id, analysis_id)
+        result = svc.compare_with_history(user_id, analysis_id, prefetch=prefetch)
         if isinstance(result, dict) and result.get('available'):
             context['comparison'] = result
         result = svc.narrative_evolution(user_id, analysis_id)
@@ -55,8 +70,11 @@ def build_v13_context(analysis_id, user_id):
 
     try:
         from services.v13_evidence_chain_service import V13EvidenceChainService
+        assessment = None
+        if prefetch is not None:
+            assessment = prefetch.get('threat_row')
         result = V13EvidenceChainService().get_analysis_evidence_chain(
-            analysis_id)
+            analysis_id, assessment=assessment)
         if isinstance(result, dict) and result.get('available'):
             context['evidence'] = result
     except Exception as exc:
