@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Reports - SocialSense AI{% endblock %}
+
+{% block page_header %}
+<div class="ss-page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="ss-page-header__title">Reports</h1>
+            <p class="ss-page-header__subtitle">Generated reports and scheduled report automation — review, download, and manage schedules.</p>
+        </div>
+        <a href="{{ url_for('reports.create') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>New Report</a>
+    </div>
+</div>
+<nav aria-label="Breadcrumb" class="ss-breadcrumb mb-3">
+    <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Reports</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="ss-card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-file-alt me-2 text-secondary"></i>Scheduled Reports <span class="badge bg-secondary ms-2">{{ total if total is defined else reports|length }}</span></h6>
+        <small class="text-muted">Frequency, status, and actions at a glance</small>
+    </div>
+    <div class="card-body p-0">
+        {% if reports %}
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">Type</th>
+                        <th scope="col">Format</th>
+                        <th scope="col">Platform</th>
+                        <th scope="col">Frequency</th>
+                        <th scope="col">Last Run</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reports %}
+                    <tr>
+                        <td class="small fw-bold">{{ r.report_type|title }}</td>
+                        <td><span class="badge bg-secondary">{{ r.report_format|upper }}</span></td>
+                        <td><span class="badge bg-dark border text-light">{{ r.platform_filter or 'All' }}</span></td>
+                        <td><span class="badge bg-info">{{ r.frequency|title }}</span></td>
+                        <td><small class="text-muted">{{ r.last_run_at.strftime('%Y-%m-%d %H:%M') if r.last_run_at else 'Never' }}</small></td>
+                        <td><span class="badge bg-{{ 'success' if r.is_active else 'secondary' }}">{{ 'Active' if r.is_active else 'Paused' }}</span></td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Report actions">
+                                <form method="POST" action="{{ url_for('reports.generate_now', report_id=r.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-outline-primary" title="Run now" aria-label="Run report {{ r.id }} now"><i class="fas fa-play"></i></button>
+                                </form>
+                                <form method="POST" action="{{ url_for('reports.toggle', report_id=r.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-outline-warning" title="{{ 'Pause' if r.is_active else 'Resume' }}" aria-label="{{ 'Pause' if r.is_active else 'Resume' }} report {{ r.id }}"><i class="fas fa-{{ 'pause' if r.is_active else 'play' }}"></i></button>
+                                </form>
+                                {% if r.last_file_path %}
+                                <a href="{{ url_for('reports.download', report_id=r.id) }}" class="btn btn-sm btn-outline-success" title="Download" aria-label="Download report {{ r.id }}"><i class="fas fa-download"></i></a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <div class="ss-card ss-card--elevated d-inline-block p-4" style="max-width: 480px;">
+                <i class="fas fa-file-alt fa-2x text-muted mb-3"></i>
+                <h5>No reports yet</h5>
+                <p class="text-muted small mb-3">Create a scheduled report to receive regular intelligence summaries.</p>
+                <a href="{{ url_for('reports.create') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>New Report</a>
+            </div>
+        </div>
+        {% endif %}
+        {% if total_pages is defined and total_pages > 1 %}
+        <nav aria-label="Reports pagination" class="p-3 border-top" style="border-color: var(--ss-border) !important;">
+            <ul class="pagination justify-content-center mb-0">
+                <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('reports.list_reports', page=page-1) if page > 1 else '#' }}" aria-label="Previous page">Previous</a>
+                </li>
+                <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
+                <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('reports.list_reports', page=page+1) if page < total_pages else '#' }}" aria-label="Next page">Next</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

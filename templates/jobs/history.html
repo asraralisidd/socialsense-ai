@@ -1,103 +1,119 @@
 {% extends "base.html" %}
-{% block title %}Job History - SocialSense AI{% endblock %}
+{% block title %}Jobs - SocialSense AI{% endblock %}
+
+{% block page_header %}
+<div class="ss-page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="ss-page-header__title">Jobs</h1>
+            <p class="ss-page-header__subtitle">Background analysis and report processing — monitor progress, retry, or cancel jobs.</p>
+        </div>
+        <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
+            <i class="fas fa-plus-circle me-1"></i>New Analysis
+        </a>
+    </div>
+</div>
+<nav aria-label="Breadcrumb" class="ss-breadcrumb mb-3">
+    <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Jobs</li>
+    </ol>
+</nav>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold"><i class="fas fa-history me-2"></i>Job History</h3>
-    <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
-        <i class="fas fa-plus-circle me-1"></i>New Analysis
-    </a>
-</div>
-
-<ul class="nav nav-pills mb-4">
+<ul class="nav nav-pills mb-3" role="tablist" aria-label="Job status filter">
     <li class="nav-item">
         <a class="nav-link {{ 'active' if current_status is none else '' }}"
-           href="{{ url_for('jobs.list_jobs') }}">All</a>
+           href="{{ url_for('jobs.list_jobs') }}" {% if current_status is none %}aria-current="page"{% endif %}>All</a>
     </li>
     <li class="nav-item">
         <a class="nav-link {{ 'active' if current_status == 'PENDING' else '' }}"
-           href="{{ url_for('jobs.list_jobs', status='PENDING') }}">Pending</a>
+           href="{{ url_for('jobs.list_jobs', status='PENDING') }}" {% if current_status == 'PENDING' %}aria-current="page"{% endif %}>Pending</a>
     </li>
     <li class="nav-item">
         <a class="nav-link {{ 'active' if current_status == 'RUNNING' else '' }}"
-           href="{{ url_for('jobs.list_jobs', status='RUNNING') }}">Running</a>
+           href="{{ url_for('jobs.list_jobs', status='RUNNING') }}" {% if current_status == 'RUNNING' %}aria-current="page"{% endif %}>Running</a>
     </li>
     <li class="nav-item">
         <a class="nav-link {{ 'active' if current_status == 'COMPLETED' else '' }}"
-           href="{{ url_for('jobs.list_jobs', status='COMPLETED') }}">Completed</a>
+           href="{{ url_for('jobs.list_jobs', status='COMPLETED') }}" {% if current_status == 'COMPLETED' %}aria-current="page"{% endif %}>Completed</a>
     </li>
     <li class="nav-item">
         <a class="nav-link {{ 'active' if current_status == 'FAILED' else '' }}"
-           href="{{ url_for('jobs.list_jobs', status='FAILED') }}">Failed</a>
+           href="{{ url_for('jobs.list_jobs', status='FAILED') }}" {% if current_status == 'FAILED' %}aria-current="page"{% endif %}>Failed</a>
     </li>
     <li class="nav-item">
         <a class="nav-link {{ 'active' if current_status == 'CANCELLED' else '' }}"
-           href="{{ url_for('jobs.list_jobs', status='CANCELLED') }}">Cancelled</a>
+           href="{{ url_for('jobs.list_jobs', status='CANCELLED') }}" {% if current_status == 'CANCELLED' %}aria-current="page"{% endif %}>Cancelled</a>
     </li>
 </ul>
 
-<div class="card border-secondary">
+<div class="ss-card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-tasks me-2 text-secondary"></i>Job History <span class="badge bg-secondary ms-2">{{ total if total is defined else jobs|length }}</span></h6>
+        <small class="text-muted">Most recent first · pagination keeps results bounded</small>
+    </div>
     <div class="card-body p-0">
         {% if jobs %}
         <div class="table-responsive">
             <table class="table table-dark table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Platform</th>
-                        <th>Input</th>
-                        <th>Status</th>
-                        <th>Progress</th>
-                        <th>Time</th>
-                        <th>Created</th>
-                        <th>Actions</th>
+                        <th scope="col">#</th>
+                        <th scope="col">Platform</th>
+                        <th scope="col">Input</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Progress</th>
+                        <th scope="col">Time</th>
+                        <th scope="col">Created</th>
+                        <th scope="col" class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for j in jobs %}
                     <tr>
-                        <td>{{ j.id }}</td>
+                        <td class="text-muted small">#{{ j.id }}</td>
                         <td>
                             {% if j.platform == 'youtube' %}
                             <span class="badge bg-secondary"><i class="fab fa-youtube text-danger me-1"></i>YouTube</span>
                             {% elif j.platform == 'reddit' %}
-                            <span class="badge bg-secondary"><i class="fab fa-reddit text-orange me-1"></i>Reddit</span>
+                            <span class="badge bg-secondary"><i class="fab fa-reddit me-1" style="color: #ff4500;"></i>Reddit</span>
                             {% else %}
                             <span class="badge bg-secondary">{{ j.platform }}</span>
                             {% endif %}
                         </td>
-                        <td><small>{{ j.source_input|truncate(30) }}</small></td>
+                        <td><small class="text-muted">{{ j.source_input|truncate(32) }}</small></td>
                         <td>
                             <span class="badge bg-{{ 'secondary' if j.status == 'PENDING' else 'info' if j.status == 'RUNNING' else 'success' if j.status == 'COMPLETED' else 'danger' if j.status in ('FAILED', 'TIMEOUT') else 'warning' }}">
                                 {{ j.status }}
                             </span>
                         </td>
                         <td>
-                            <div class="progress" style="height: 8px; min-width: 80px;">
+                            <div class="progress" style="height: 8px; min-width: 80px;" role="progressbar" aria-valuenow="{{ j.progress_percent }}" aria-valuemin="0" aria-valuemax="100" aria-label="Job {{ j.id }} progress">
                                 <div class="progress-bar progress-bar-striped {{ 'progress-bar-animated' if j.status == 'RUNNING' else '' }}"
-                                     role="progressbar" style="width: {{ j.progress_percent }}%;"
-                                     aria-valuenow="{{ j.progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                     style="width: {{ j.progress_percent }}%;">
                                 </div>
                             </div>
                             <small class="text-muted">{{ j.progress_percent }}%</small>
                         </td>
                         <td>
                             {% if j.execution_time_seconds %}
-                            <small>{{ j.execution_time_seconds|round(1) }}s</small>
+                            <small class="ss-mono">{{ j.execution_time_seconds|round(1) }}s</small>
                             {% else %}
-                            <small class="text-muted">-</small>
+                            <small class="text-muted">—</small>
                             {% endif %}
                         </td>
-                        <td><small>{{ j.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
+                        <td><small class="text-muted">{{ j.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
                         <td>
-                            <div class="btn-group btn-group-sm">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Job {{ j.id }} actions">
                                 <a href="{{ url_for('jobs.status', job_id=j.id) }}"
-                                   class="btn btn-outline-primary" title="View Status">
+                                   class="btn btn-outline-primary" title="View Status" aria-label="View status for job {{ j.id }}">
                                     <i class="fas fa-eye"></i>
                                 </a>
                                 {% if j.status == 'COMPLETED' and j.result_analysis_id %}
                                 <a href="{{ url_for('analysis.result', analysis_id=j.result_analysis_id) }}"
-                                   class="btn btn-outline-success" title="View Results">
+                                   class="btn btn-outline-success" title="View Results" aria-label="View results for job {{ j.id }}">
                                     <i class="fas fa-chart-bar"></i>
                                 </a>
                                 {% endif %}
@@ -105,7 +121,7 @@
                                 <form method="POST" action="{{ url_for('jobs.retry', job_id=j.id) }}"
                                       style="display:inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-warning" title="Retry">
+                                    <button type="submit" class="btn btn-outline-warning" title="Retry" aria-label="Retry job {{ j.id }}">
                                         <i class="fas fa-redo"></i>
                                     </button>
                                 </form>
@@ -114,7 +130,7 @@
                                 <form method="POST" action="{{ url_for('jobs.cancel', job_id=j.id) }}"
                                       style="display:inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-danger" title="Cancel">
+                                    <button type="submit" class="btn btn-outline-danger" title="Cancel" aria-label="Cancel job {{ j.id }}">
                                         <i class="fas fa-ban"></i>
                                     </button>
                                 </form>
@@ -127,14 +143,29 @@
             </table>
         </div>
         {% else %}
-        <div class="text-center py-5 text-muted">
-            <i class="fas fa-inbox fa-4x mb-3"></i>
-            <h5>No Job History</h5>
-            <p>Jobs are created when you start an analysis.</p>
-            <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
-                <i class="fas fa-plus-circle me-1"></i>New Analysis
-            </a>
+        <div class="text-center py-5">
+            <div class="ss-card ss-card--elevated d-inline-block p-4" style="max-width: 480px;">
+                <i class="fas fa-inbox fa-2x text-muted mb-3"></i>
+                <h5>No Job History</h5>
+                <p class="text-muted small mb-3">Jobs are created when you start an analysis. Run your first analysis to see jobs here.</p>
+                <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
+                    <i class="fas fa-plus-circle me-1"></i>New Analysis
+                </a>
+            </div>
         </div>
+        {% endif %}
+        {% if total_pages is defined and total_pages > 1 %}
+        <nav aria-label="Jobs pagination" class="p-3 border-top" style="border-color: var(--ss-border) !important;">
+            <ul class="pagination justify-content-center mb-0">
+                <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('jobs.list_jobs', page=page-1, status=current_status) if page > 1 else '#' }}" aria-label="Previous page">Previous</a>
+                </li>
+                <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
+                <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('jobs.list_jobs', page=page+1, status=current_status) if page < total_pages else '#' }}" aria-label="Next page">Next</a>
+                </li>
+            </ul>
+        </nav>
         {% endif %}
     </div>
 </div>

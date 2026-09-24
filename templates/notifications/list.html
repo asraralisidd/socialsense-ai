@@ -1,44 +1,83 @@
 {% extends "base.html" %}
 {% block title %}Notifications - SocialSense AI{% endblock %}
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold"><i class="fas fa-bell me-2"></i>Notifications
-        {% if unread_count > 0 %}<span class="badge bg-danger ms-2">{{ unread_count }} unread</span>{% endif %}
-    </h3>
-    <div>
+
+{% block page_header %}
+<div class="ss-page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="ss-page-header__title">Notifications</h1>
+            <p class="ss-page-header__subtitle">Account and system notifications — updates on analyses, reports, and jobs.</p>
+        </div>
         {% if unread_count > 0 %}
         <form method="POST" action="{{ url_for('notifications.mark_all_read') }}" class="d-inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-secondary btn-sm"><i class="fas fa-check-double me-1"></i>Mark All Read</button>
+            <button class="btn btn-outline-secondary btn-sm" aria-label="Mark all notifications as read"><i class="fas fa-check-double me-1"></i>Mark All Read</button>
         </form>
         {% endif %}
     </div>
 </div>
-<div class="card border-secondary"><div class="card-body p-0">
-    {% if notifications %}
-    <div class="list-group list-group-flush">
-        {% for n in notifications %}
-        <div class="list-group-item bg-dark border-secondary d-flex justify-content-between align-items-center {{ 'fw-bold' if not n.is_read }}">
-            <div>
-                <small class="text-muted">{{ n.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
-                <span class="badge bg-{{ n.severity }} ms-2">{{ n.type }}</span>
-                <div class="mt-1">{{ n.title }}</div>
-                {% if n.message %}<small class="text-muted">{{ n.message }}</small>{% endif %}
+<nav aria-label="Breadcrumb" class="ss-breadcrumb mb-3">
+    <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Notifications</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="ss-card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-bell me-2 text-secondary"></i>Notifications {% if unread_count > 0 %}<span class="badge bg-danger ms-2">{{ unread_count }} unread</span>{% endif %}</h6>
+        <small class="text-muted">{{ total if total is defined else notifications|length }} total</small>
+    </div>
+    <div class="card-body p-0">
+        {% if notifications %}
+        <div class="list-group list-group-flush">
+            {% for n in notifications %}
+            <div class="list-group-item d-flex justify-content-between align-items-center {% if not n.is_read %}fw-bold{% endif %}" style="background: {% if not n.is_read %}var(--ss-surface-raised){% else %}var(--ss-surface){% endif %}; border-color: var(--ss-border);">
+                <div>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted">{{ n.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        <span class="badge bg-{{ 'danger' if n.severity == 'danger' else 'warning text-dark' if n.severity == 'warning' else 'secondary' }}">{{ n.type|replace('_',' ')|title }}</span>
+                        {% if not n.is_read %}<span class="badge ss-badge--risk-high">Unread</span>{% else %}<span class="badge bg-secondary">Read</span>{% endif %}
+                    </div>
+                    <div class="mt-1 {% if not n.is_read %}text-white{% endif %}">{{ n.title }}</div>
+                    {% if n.message %}<small class="text-muted d-block">{{ n.message }}</small>{% endif %}
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0 ms-3">
+                    {% if n.link_url %}<a href="{{ n.link_url }}" class="btn btn-sm btn-outline-info" aria-label="Open notification {{ n.id }} link"><i class="fas fa-link"></i></a>{% endif %}
+                    {% if not n.is_read %}
+                    <form method="POST" action="{{ url_for('notifications.mark_read', notification_id=n.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-sm btn-outline-success" aria-label="Mark notification {{ n.id }} as read"><i class="fas fa-check"></i></button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
-            <div class="d-flex gap-2">
-                {% if n.link_url %}<a href="{{ n.link_url }}" class="btn btn-sm btn-outline-info"><i class="fas fa-link"></i></a>{% endif %}
-                {% if not n.is_read %}
-                <form method="POST" action="{{ url_for('notifications.mark_read', notification_id=n.id) }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm btn-outline-success"><i class="fas fa-check"></i></button>
-                </form>
-                {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <div class="ss-card ss-card--elevated d-inline-block p-4" style="max-width: 480px;">
+                <i class="fas fa-bell-slash fa-2x text-muted mb-3"></i>
+                <h5>No notifications yet</h5>
+                <p class="text-muted small mb-0">System updates and report notifications will appear here.</p>
             </div>
         </div>
-        {% endfor %}
+        {% endif %}
+        {% if total_pages is defined and total_pages > 1 %}
+        <nav aria-label="Notifications pagination" class="p-3 border-top" style="border-color: var(--ss-border) !important;">
+            <ul class="pagination justify-content-center mb-0">
+                <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('notifications.list_notifications', page=page-1) if page > 1 else '#' }}" aria-label="Previous page">Previous</a>
+                </li>
+                <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
+                <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('notifications.list_notifications', page=page+1) if page < total_pages else '#' }}" aria-label="Next page">Next</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
     </div>
-    {% else %}
-    <div class="text-center py-4 text-muted"><p>No notifications yet.</p></div>
-    {% endif %}
-</div></div>
+</div>
 {% endblock %}

@@ -12,8 +12,15 @@ report_repo = ScheduledReportRepository()
 @report_bp.route('/')
 @login_required
 def list_reports():
-    reports = report_repo.get_user_reports(current_user.id, include_inactive=True)
-    return render_template('reports/list.html', reports=reports)
+    page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
+    limit = 20
+    offset = (page - 1) * limit
+    reports = report_repo.get_user_reports(current_user.id, include_inactive=True, limit=limit, offset=offset)
+    total = report_repo.count_user_reports(current_user.id, include_inactive=True)
+    total_pages = (total + limit - 1) // limit if total else 1
+    return render_template('reports/list.html', reports=reports, page=page, total_pages=total_pages, total=total)
 
 
 @report_bp.route('/create', methods=['GET', 'POST'])

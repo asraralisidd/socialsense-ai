@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Create Report - SocialSense AI{% endblock %}
+{% block content %}
+<div class="row justify-content-center py-4">
+    <div class="col-md-6">
+        <div class="card border-secondary"><div class="card-body p-4">
+            <h4 class="fw-bold mb-4"><i class="fas fa-file-alt me-2 text-primary"></i>Create Scheduled Report</h4>
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label">Frequency</label>
+                    <select name="frequency" class="form-select">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Platform Filter</label>
+                    <select name="platform_filter" class="form-select">
+                        <option value="">All Platforms</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="reddit">Reddit</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Report Format</label>
+                    <select name="report_format" class="form-select">
+                        <option value="html">HTML</option>
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-save me-1"></i>Create Report</button>
+            </form>
+        </div></div>
+    </div>
+</div>
+{% endblock %}

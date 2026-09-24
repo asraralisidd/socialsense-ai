@@ -11,8 +11,11 @@ class NotificationService:
     def create(self, user_id, ntype, title, message=None, severity=Notification.SEVERITY_INFO, link_url=None):
         return self.repo.create_notification(user_id, ntype, title, message, severity, link_url)
 
-    def get_user_notifications(self, user_id, limit=50, unread_only=False):
-        return self.repo.get_user_notifications(user_id, limit, unread_only)
+    def get_user_notifications(self, user_id, limit=50, offset=0, unread_only=False):
+        return self.repo.get_user_notifications(user_id, limit, offset, unread_only)
+
+    def count_user_notifications(self, user_id, unread_only=False):
+        return self.repo.count_user_notifications(user_id, unread_only)
 
     def get_unread_count(self, user_id):
         return self.repo.get_unread_count(user_id)

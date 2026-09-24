@@ -7,11 +7,25 @@ class NotificationRepository(BaseRepository):
     def __init__(self):
         super().__init__(Notification)
 
-    def get_user_notifications(self, user_id, limit=50, unread_only=False):
+    def get_user_notifications(self, user_id, limit=50, offset=0, unread_only=False):
+        try:
+            limit = max(1, min(int(limit), 50))
+        except (TypeError, ValueError):
+            limit = 50
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
         q = self.model.query.filter_by(user_id=user_id)
         if unread_only:
             q = q.filter_by(is_read=False)
-        return q.order_by(Notification.created_at.desc()).limit(limit).all()
+        return q.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit).offset(offset).all()
+
+    def count_user_notifications(self, user_id, unread_only=False):
+        q = self.model.query.filter_by(user_id=user_id)
+        if unread_only:
+            q = q.filter_by(is_read=False)
+        return q.count()
 
     def get_unread_count(self, user_id):
         return self.model.query.filter_by(user_id=user_id, is_read=False).count()
@@ -37,10 +51,14 @@ class NotificationRepository(BaseRepository):
         db.session.commit()
         return n
 
-    def delete_old_notifications(self, days=30):
+    def delete_old_notifications(self, days=30, limit=500):
         from datetime import datetime, timezone, timedelta
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-        old = self.model.query.filter(Notification.created_at < cutoff).all()
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 500
+        old = self.model.query.filter(Notification.created_at < cutoff).order_by(Notification.created_at.asc(), Notification.id.asc()).limit(limit).all()
         for n in old:
             db.session.delete(n)
         db.session.commit()

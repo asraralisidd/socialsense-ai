@@ -99,7 +99,12 @@ class RedisService:
         count = results[1] if results else 0
         if count >= max_attempts:
             return False
-        self.client.zadd(key, {str(now): now})
+        # Unique member per attempt: identical timestamps within the same
+        # second must not collapse into one sorted-set member, otherwise
+        # bursts would never reach max_attempts.
+        import uuid
+        member = f'{now}:{uuid.uuid4().hex[:8]}'
+        self.client.zadd(key, {member: now})
         self.client.expire(key, window)
         return True
 

@@ -64,23 +64,104 @@ def _evidence_text(value):
 
 
 class ExportService:
+    # Maximum ids per IN clause: comfortably below SQLite (999 pre-3.32)
+    # and PostgreSQL (65535) parameter limits. Deterministic chunking.
+    _BATCH_CHUNK_SIZE = 500
+
     def __init__(self):
         self.comment_repo = CommentResultRepository()
         self.analysis_repo = AnalysisRepository()
         self.export_repo = ReportExportRepository()
 
-    def _build_export_bundle(self, analysis_id, user_id):
+    @classmethod
+    def _chunked(cls, ids):
+        ids = list(ids or [])
+        for start in range(0, len(ids), cls._BATCH_CHUNK_SIZE):
+            yield ids[start:start + cls._BATCH_CHUNK_SIZE]
+
+    def _batched_comment_maps(self, comments):
+        """Request-local lookup maps replacing per-comment queries.
+
+        Returns ``{comment_id: {'context': dict|None,
+        'mentions': [(name, type)], 'contexts': [(sentiment, score,
+        risk, relevance, entity_name)]}}``. All batched reads filter by
+        the comment ids of the already ownership-gated comment list, so
+        no cross-user data can enter. Ordering matches legacy ``.all()``
+        row order via explicit ``order_by(id)``. Only columns actually
+        rendered by CSV/JSON are selected.
+        """
+        from models.comment_context import CommentContext
+        from models.entity import Entity
+        from models.entity_context import EntityContext
+        from models.entity_mention import EntityMention
+
+        maps = {}
+        ids = [c.id for c in (comments or []) if getattr(c, 'id', None) is not None]
+        if not ids:
+            return maps
+        for chunk in self._chunked(ids):
+            for row in db.session.query(
+                CommentContext.comment_result_id,
+                CommentContext.transcript_relevance_score,
+                CommentContext.context_match_label,
+                CommentContext.reason,
+            ).filter(CommentContext.comment_result_id.in_(chunk)
+                     ).order_by(CommentContext.comment_result_id,
+                                CommentContext.id).all():
+                entry = maps.setdefault(row[0], self._empty_comment_entry())
+                if entry['context'] is None:
+                    entry['context'] = {
+                        'transcript_relevance_score': row[1],
+                        'context_match_label': row[2],
+                        'reason': row[3],
+                    }
+            for row in db.session.query(
+                EntityMention.comment_result_id,
+                Entity.name,
+                Entity.entity_type,
+            ).join(Entity,
+                   EntityMention.entity_id == Entity.id
+                   ).filter(EntityMention.comment_result_id.in_(chunk)
+                            ).order_by(EntityMention.comment_result_id,
+                                       EntityMention.id).all():
+                entry = maps.setdefault(row[0], self._empty_comment_entry())
+                if row[1] is not None:
+                    entry['mentions'].append((row[1], row[2]))
+            for row in db.session.query(
+                EntityContext.comment_result_id,
+                EntityContext.entity_sentiment,
+                EntityContext.entity_sentiment_score,
+                EntityContext.entity_risk_score,
+                EntityContext.entity_relevance_score,
+                Entity.name,
+            ).outerjoin(Entity,
+                        EntityContext.entity_id == Entity.id
+                        ).filter(EntityContext.comment_result_id.in_(chunk)
+                                 ).order_by(EntityContext.comment_result_id,
+                                            EntityContext.id).all():
+                entry = maps.setdefault(row[0], self._empty_comment_entry())
+                entry['contexts'].append((row[1], row[2], row[3], row[4], row[5]))
+        return maps
+
+    @staticmethod
+    def _empty_comment_entry():
+        return {'context': None, 'mentions': [], 'contexts': []}
+
+    def _build_export_bundle(self, analysis_id, user_id, include_comments=True):
         """Assemble the full V1-V12 export data contract.
 
         Reuses existing read services/data only; no intelligence is recomputed
         here. Returns None if the analysis is missing/not owned by the user.
+        ``include_comments=False`` skips the comment collection for formats
+        whose sections never render comment rows (XLSX/PDF/DOCX).
         """
         analysis = self.analysis_repo.get_user_analysis_with_reddit(
             analysis_id, user_id)
         if not analysis:
             return None
 
-        comments = self.comment_repo.get_by_analysis_id(analysis_id)
+        comments = self.comment_repo.get_by_analysis_id(
+            analysis_id) if include_comments else []
         yt = analysis.youtube_analysis
         reddit = analysis.reddit_analysis
 
@@ -478,9 +559,13 @@ class ExportService:
             'Trend Direction',
         ])
 
+        detail_maps = self._batched_comment_maps(comments)
         for c in comments:
             published = c.published_at.strftime('%Y-%m-%d %H:%M:%S UTC') if c.published_at else ''
-            ctx = c.context
+            details = detail_maps.get(c.id) or self._empty_comment_entry()
+            ctx = details['context']
+            mentions = details['mentions']
+            ec_rows = details['contexts']
             writer.writerow([
                 c.comment_text,
                 c.author or '',
@@ -504,14 +589,14 @@ class ExportService:
                 c.risk_level,
                 c.risk_explanation or '',
                 c.recommendation or '',
-                ctx.transcript_relevance_score if ctx else '',
-                ctx.context_match_label.replace('_', ' ').title() if ctx else '',
-                ctx.reason if ctx else '',
-                '; '.join([em.entity.name for em in c.entity_mentions.all()]) if c.entity_mentions.count() > 0 else '',
-                '; '.join([em.entity.entity_type for em in c.entity_mentions.all()]) if c.entity_mentions.count() > 0 else '',
-                '; '.join([ec.entity_sentiment or '' for ec in c.entity_contexts.all()]) if c.entity_contexts.count() > 0 else '',
-                '; '.join([str(ec.entity_risk_score) for ec in c.entity_contexts.all()]) if c.entity_contexts.count() > 0 else '',
-                '; '.join([str(ec.entity_relevance_score) for ec in c.entity_contexts.all()]) if c.entity_contexts.count() > 0 else '',
+                ctx['transcript_relevance_score'] if ctx else '',
+                ctx['context_match_label'].replace('_', ' ').title() if ctx else '',
+                ctx['reason'] if ctx else '',
+                '; '.join([name for name, _type in mentions]) if mentions else '',
+                '; '.join([_type for _name, _type in mentions]) if mentions else '',
+                '; '.join([sentiment or '' for sentiment, _s, _r, _rel, _e in ec_rows]) if ec_rows else '',
+                '; '.join([str(risk) for _s, _sc, risk, _rel, _e in ec_rows]) if ec_rows else '',
+                '; '.join([str(relevance) for _s, _sc, _r, relevance, _e in ec_rows]) if ec_rows else '',
                 history_context_score,
                 history_risk_score,
                 '',
@@ -588,8 +673,12 @@ class ExportService:
             }
 
         comments_data = []
+        detail_maps = self._batched_comment_maps(comments)
         for c in comments:
-            ctx = c.context
+            details = detail_maps.get(c.id) or self._empty_comment_entry()
+            ctx = details['context']
+            mentions = details['mentions']
+            ec_rows = details['contexts']
             comments_data.append({
                 'comment_text': c.comment_text,
                 'author': c.author,
@@ -615,12 +704,12 @@ class ExportService:
                 'risk_level': c.risk_level,
                 'risk_explanation': c.risk_explanation,
                 'recommendation': c.recommendation,
-                'context_relevance_score': ctx.transcript_relevance_score if ctx else None,
-                'context_match_label': ctx.context_match_label.replace('_', ' ').title() if ctx else None,
-                'context_reason': ctx.reason if ctx else None,
-                'entity_mentions': [{'name': em.entity.name, 'type': em.entity.entity_type} for em in c.entity_mentions.all()] if c.entity_mentions.count() > 0 else [],
-                'entity_sentiments': [{'entity': ec.entity.name if ec.entity else '', 'sentiment': ec.entity_sentiment, 'score': ec.entity_sentiment_score} for ec in c.entity_contexts.all()] if c.entity_contexts.count() > 0 else [],
-                'entity_risks': [{'entity': ec.entity.name if ec.entity else '', 'risk_score': ec.entity_risk_score} for ec in c.entity_contexts.all()] if c.entity_contexts.count() > 0 else [],
+                'context_relevance_score': ctx['transcript_relevance_score'] if ctx else None,
+                'context_match_label': ctx['context_match_label'].replace('_', ' ').title() if ctx else None,
+                'context_reason': ctx['reason'] if ctx else None,
+                'entity_mentions': [{'name': name, 'type': _type} for name, _type in mentions],
+                'entity_sentiments': [{'entity': ename or '', 'sentiment': sentiment, 'score': score} for sentiment, score, _r, _rel, ename in ec_rows],
+                'entity_risks': [{'entity': ename or '', 'risk_score': risk} for _s, _sc, risk, _rel, ename in ec_rows],
             })
 
         data = {
@@ -1086,7 +1175,8 @@ class ExportService:
 # ------------------------------------------------------------------ XLSX
 
     def generate_xlsx(self, analysis_id, user_id):
-        bundle = self._build_export_bundle(analysis_id, user_id)
+        bundle = self._build_export_bundle(analysis_id, user_id,
+                                           include_comments=False)
         if not bundle:
             return None
 
@@ -1149,7 +1239,8 @@ class ExportService:
     # ------------------------------------------------------------------ PDF
 
     def generate_pdf(self, analysis_id, user_id):
-        bundle = self._build_export_bundle(analysis_id, user_id)
+        bundle = self._build_export_bundle(analysis_id, user_id,
+                                           include_comments=False)
         if not bundle:
             return None
 
@@ -1234,7 +1325,8 @@ class ExportService:
     # ------------------------------------------------------------------ DOCX
 
     def generate_docx(self, analysis_id, user_id):
-        bundle = self._build_export_bundle(analysis_id, user_id)
+        bundle = self._build_export_bundle(analysis_id, user_id,
+                                           include_comments=False)
         if not bundle:
             return None
 

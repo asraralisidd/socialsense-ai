@@ -20,8 +20,16 @@ class Config:
     WTF_CSRF_ENABLED = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
     REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SECURE = os.environ.get('REMEMBER_COOKIE_SECURE', 'false').lower() == 'true'
     REMEMBER_COOKIE_DURATION = 86400 * 30
+
+    LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.environ.get('LOGIN_RATE_LIMIT_MAX_ATTEMPTS', '10'))
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('LOGIN_RATE_LIMIT_WINDOW_SECONDS', '300'))
+    PASSWORD_RESET_TOKEN_MAX_AGE = int(os.environ.get('PASSWORD_RESET_TOKEN_MAX_AGE', '3600'))
+    PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS', '5'))
+    PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS', '3600'))
 
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', os.environ.get('REDIS_URL', 'redis://localhost:6379/0'))
@@ -50,6 +58,7 @@ class Config:
     JOB_LOG_RETENTION_DAYS = int(os.environ.get('JOB_LOG_RETENTION_DAYS', '30'))
     NOTIFICATION_RETENTION_DAYS = int(os.environ.get('NOTIFICATION_RETENTION_DAYS', '30'))
     REPORT_RETENTION_DAYS = int(os.environ.get('REPORT_RETENTION_DAYS', '30'))
+    REPORT_MAX_DUE_BATCH = int(os.environ.get('REPORT_MAX_DUE_BATCH', '20'))
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reports')
 
     ENABLE_TRANSCRIPT_ANALYSIS = os.environ.get('ENABLE_TRANSCRIPT_ANALYSIS', 'true').lower() == 'true'
@@ -139,6 +148,11 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+    # Production serves HTTPS: cookies must never travel over plain HTTP,
+    # and the app must never boot on the development fallback secret.
+    SESSION_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SECURE = True
+    SECRET_KEY = os.environ.get('SECRET_KEY')
 
 
 class TestingConfig(Config):

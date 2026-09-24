@@ -10,7 +10,7 @@ PostgreSQL notes
 * Every aggregate lists its non-aggregate columns explicitly in ``GROUP BY``.
 * All list-returning queries are bounded by an explicit ``limit``.
 """
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 
 from database import db
 from models.analysis import Analysis
@@ -142,21 +142,26 @@ class PropagationRepository(BaseRepository):
     def get_cross_platform_narrative_count(self, user_id):
         """Number of the user's narratives that span more than one platform.
 
-        Computed in Python over a bounded, full aggregate query (no GROUP BY on
-        a mismatched projection) - PostgreSQL-safe and deterministic.
+        Aggregated in the database (GROUP BY + HAVING) so no full
+        occurrence rows are materialized. PostgreSQL + SQLite compatible.
+        A narrative counts when it has occurrences on at least two
+        distinct non-NULL platforms, matching the previous Python-side
+        ``seen`` logic for the stored data (platform is effectively
+        non-NULL in practice; NULL platforms are excluded from the
+        distinct count, exactly as AVG/COUNT semantics exclude NULLs).
         """
         rows = db.session.query(
             NarrativeOccurrence.narrative_id,
-            NarrativeOccurrence.platform,
         ).join(
             Narrative, Narrative.id == NarrativeOccurrence.narrative_id
         ).filter(
-            Narrative.user_id == user_id
+            Narrative.user_id == user_id,
+        ).group_by(
+            NarrativeOccurrence.narrative_id
+        ).having(
+            func.count(func.distinct(NarrativeOccurrence.platform)) > 1,
         ).all()
-        seen = {}
-        for narrative_id, platform in rows:
-            seen.setdefault(narrative_id, set()).add(platform)
-        return sum(1 for platforms in seen.values() if len(platforms) > 1)
+        return len(rows)
 
     def count_for_user(self, user_id):
         return PropagationEvent.query.filter_by(user_id=user_id).count()

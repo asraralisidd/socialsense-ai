@@ -12,17 +12,47 @@ class ScheduledReportRepository(BaseRepository):
     def __init__(self):
         super().__init__(ScheduledReport)
 
-    def get_user_reports(self, user_id, include_inactive=False):
+    def get_user_reports(self, user_id, include_inactive=False, limit=20, offset=0):
+        try:
+            limit = max(1, min(int(limit), 50))
+        except (TypeError, ValueError):
+            limit = 20
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
         q = self.model.query.filter_by(user_id=user_id)
         if not include_inactive:
             q = q.filter_by(is_active=True)
-        return q.order_by(ScheduledReport.next_run_at.asc()).all()
+        return q.order_by(ScheduledReport.next_run_at.asc(), ScheduledReport.id.desc()).limit(limit).offset(offset).all()
 
-    def get_due_reports(self):
-        return self.model.query.filter(
+    def count_user_reports(self, user_id, include_inactive=False):
+        q = self.model.query.filter_by(user_id=user_id)
+        if not include_inactive:
+            q = q.filter_by(is_active=True)
+        return q.count()
+
+    def get_due_reports(self, limit=None):
+        """Due reports oldest-first, with an optional SQL-level batch cap.
+
+        ``limit=None`` preserves the legacy unbounded read; callers that
+        process reports in a scheduler tick must pass an explicit bound so
+        remaining reports stay due for the next cycle instead of piling
+        into one tick.
+        """
+        query = self.model.query.filter(
             ScheduledReport.is_active == True,
             ScheduledReport.next_run_at <= _now(),
-        ).all()
+        ).order_by(ScheduledReport.next_run_at.asc(),
+                   ScheduledReport.id.asc())
+        if limit is not None:
+            try:
+                limit = max(1, int(limit))
+            except (TypeError, ValueError):
+                limit = None
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def update_next_run(self, report_id):
         report = self.get_by_id(report_id)
@@ -38,9 +68,13 @@ class ScheduledReportRepository(BaseRepository):
         db.session.commit()
         return report
 
-    def delete_old_reports(self, days=30):
+    def delete_old_reports(self, days=30, limit=500):
         cutoff = _now() - timedelta(days=days)
-        old = self.model.query.filter(ScheduledReport.created_at < cutoff).all()
+        try:
+            limit = max(1, min(int(limit), 1000))
+        except (TypeError, ValueError):
+            limit = 500
+        old = self.model.query.filter(ScheduledReport.created_at < cutoff).order_by(ScheduledReport.created_at.asc(), ScheduledReport.id.asc()).limit(limit).all()
         for r in old:
             db.session.delete(r)
         db.session.commit()

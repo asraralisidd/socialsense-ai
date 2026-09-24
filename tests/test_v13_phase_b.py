@@ -254,47 +254,63 @@ class TestEvidenceChainIdempotency:
 # 8-9. migration round-trip (isolated file DB, never live PG)
 # --------------------------------------------------------------------------
 class TestV13Migration:
-    def _file_app(self, tmp_path):
+    # NOTE: these round-trips run in a subprocess because Config binds
+    # SQLALCHEMY_DATABASE_URI at import time from the checked-in .env
+    # (live PG); the subprocess env overrides it before any import, so
+    # live PG is never touched.
+    _MIGRATE_CODE = (
+        "from app import create_app; from database import db;"
+        "app = create_app('development');"
+        "ctx = app.app_context(); ctx.push();"
+        "from flask_migrate import upgrade, downgrade;"
+        "from sqlalchemy import inspect;"
+        "import sys;"
+        "mode = sys.argv[1];"
+        # create_all() already built the current schema; stamp the parent
+        # so only the v13_001 step under test actually executes.
+        "db.session.execute(db.text('CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) PRIMARY KEY)'));"
+        "db.session.execute(db.text(\"DELETE FROM alembic_version\"));"
+        "db.session.execute(db.text(\"INSERT INTO alembic_version VALUES ('v12_001')\"));"
+        "db.session.commit();"
+        "upgrade(revision='v13_001');"
+        "cols = {c['name']: c for c in inspect(db.engine).get_columns('threat_assessments')};"
+        "assert 'evidence_refs' in cols and cols['evidence_refs']['nullable'] is True;"
+        "rev = db.session.execute(db.text('SELECT version_num FROM alembic_version')).scalar();"
+        "assert rev == 'v13_001', rev;"
+        "print('UPGRADE-OK');"
+        "before = set(cols);"
+        "downgrade(revision='v12_001');"
+        "after = set(c['name'] for c in inspect(db.engine).get_columns('threat_assessments'));"
+        "assert before - after == {'evidence_refs'}, (before - after);"
+        "assert inspect(db.engine).has_table('narratives');"
+        "upgrade(revision='v13_001');"
+        "assert 'evidence_refs' in set(c['name'] for c in inspect(db.engine).get_columns('threat_assessments'));"
+        "print('ROUNDTRIP-OK' if mode == 'full' else 'UPGRADE-OK')"
+    )
+
+    def _run_isolated(self, tmp_path, mode):
         import os
-        os.environ['DATABASE_URL'] = f'sqlite:///{tmp_path}/v13mig.db'
-        os.environ.setdefault('YOUTUBE_API_KEY', '')
-        os.environ.setdefault('REDDIT_CLIENT_ID', '')
-        os.environ.setdefault('REDDIT_CLIENT_SECRET', '')
-        from app import create_app as _create
-        return _create('development')
+        import subprocess
+        import sys
+        dbfile = tmp_path / f'v13mig_{mode}.db'
+        env = dict(os.environ)
+        env['DATABASE_URL'] = f'sqlite:///{dbfile}'
+        env['YOUTUBE_API_KEY'] = ''
+        env['REDDIT_CLIENT_ID'] = ''
+        env['REDDIT_CLIENT_SECRET'] = ''
+        proc = subprocess.run(
+            [sys.executable, '-c', self._MIGRATE_CODE, mode],
+            capture_output=True, text=True,
+            cwd='/home/asrar/socialsense-ai', env=env, timeout=120)
+        return proc
 
     def test_upgrade_adds_nullable_column(self, tmp_path):
-        from flask_migrate import upgrade
-        test_app = self._file_app(tmp_path)
-        with test_app.app_context():
-            from sqlalchemy import inspect
-            upgrade(revision='v13_001')
-            cols = {c['name']: c for c in inspect(db.engine).get_columns(
-                'threat_assessments')}
-            assert 'evidence_refs' in cols
-            assert cols['evidence_refs']['nullable'] is True
-            rev = db.session.execute(
-                db.text('SELECT version_num FROM alembic_version')).scalar()
-            assert rev == 'v13_001'
+        proc = self._run_isolated(tmp_path, 'upgrade')
+        assert 'UPGRADE-OK' in proc.stdout, proc.stderr[-2000:]
 
     def test_downgrade_removes_only_v13_column(self, tmp_path):
-        from flask_migrate import upgrade, downgrade
-        test_app = self._file_app(tmp_path)
-        with test_app.app_context():
-            from sqlalchemy import inspect
-            upgrade(revision='v13_001')
-            before = set(c['name'] for c in inspect(db.engine).get_columns(
-                'threat_assessments'))
-            downgrade(revision='v12_001')
-            after = set(c['name'] for c in inspect(db.engine).get_columns(
-                'threat_assessments'))
-            assert before - after == {'evidence_refs'}
-            assert inspect(db.engine).has_table('narratives')
-            assert inspect(db.engine).has_table('threat_assessments')
-            upgrade(revision='v13_001')
-            assert 'evidence_refs' in set(
-                c['name'] for c in inspect(db.engine).get_columns(
-                    'threat_assessments'))
+        proc = self._run_isolated(tmp_path, 'full')
+        assert 'ROUNDTRIP-OK' in proc.stdout, proc.stderr[-2000:]
 
     def test_down_revision_is_v12(self, app):
         import importlib.util

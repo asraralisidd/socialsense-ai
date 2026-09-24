@@ -97,8 +97,32 @@ def result(analysis_id):
 @analysis_bp.route('/history')
 @login_required
 def history():
-    analyses = analysis_service.get_all_user_analyses_with_data(current_user.id)
-    return render_template('analysis/history.html', analyses=analyses)
+    page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
+    limit = 20
+    offset = (page - 1) * limit
+    analyses = analysis_service.get_all_user_analyses_with_data(current_user.id, limit=limit, offset=offset)
+    total = analysis_service.analysis_repo.count_by_user(current_user.id)
+    total_pages = (total + limit - 1) // limit if total else 1
+    return render_template('analysis/history.html', analyses=analyses, page=page, total_pages=total_pages, total=total)
+
+
+@analysis_bp.route('/<int:analysis_id>/delete', methods=['POST'])
+@login_required
+def delete_analysis(analysis_id):
+    """Self-service deletion of one user-owned analysis.
+
+    POST-only with an explicit UI confirmation. Ownership is enforced in
+    the service layer; unknown or foreign ids behave exactly like a
+    missing analysis.
+    """
+    result = analysis_service.delete_user_analysis(analysis_id, current_user.id)
+    if result.get('success'):
+        flash('Analysis deleted.', 'success')
+    else:
+        flash(result.get('error', 'Analysis could not be deleted.'), 'danger')
+    return redirect(url_for('analysis.history'))
 
 
 @analysis_bp.route('/api/check-demo')

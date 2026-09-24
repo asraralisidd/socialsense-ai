@@ -459,29 +459,28 @@ class TestMaintenanceService:
 
 
 class TestMonitoringRoutes:
+    # V14 Phase B: /admin/* requires the admin role. Normal users get 403
+    # (these tests previously asserted the insecure 200 behavior).
     def test_monitoring_page(self, app, db, user, client):
         client.post('/auth/login', data={
             'email': 'test@example.com', 'password': 'TestPass123',
         })
         response = client.get('/admin/monitoring')
-        assert response.status_code == 200
-        assert b'Monitoring' in response.data
+        assert response.status_code == 403
 
     def test_health_page(self, app, db, user, client):
         client.post('/auth/login', data={
             'email': 'test@example.com', 'password': 'TestPass123',
         })
         response = client.get('/admin/health')
-        assert response.status_code == 200
-        assert b'System Health' in response.data
+        assert response.status_code == 403
 
     def test_maintenance_page(self, app, db, user, client):
         client.post('/auth/login', data={
             'email': 'test@example.com', 'password': 'TestPass123',
         })
         response = client.get('/admin/maintenance')
-        assert response.status_code == 200
-        assert b'Maintenance' in response.data
+        assert response.status_code == 403
 
     def test_monitoring_requires_auth(self, app, db, client):
         response = client.get('/admin/monitoring')
@@ -706,19 +705,20 @@ class TestActivityDataAPI:
 
 
 class TestAdminRoutes:
+    # V14 Phase B: scheduler/maintenance POSTs require the admin role.
     def test_scheduler_run(self, app, db, user, client):
         client.post('/auth/login', data={
             'email': 'test@example.com', 'password': 'TestPass123',
         })
         response = client.post('/admin/scheduler/run')
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_mark_stale(self, app, db, user, client):
         client.post('/auth/login', data={
             'email': 'test@example.com', 'password': 'TestPass123',
         })
         response = client.post('/admin/mark-stale-failed')
-        assert response.status_code == 302
+        assert response.status_code == 403
 
 
 class TestWorkerHealthEdgeCases:

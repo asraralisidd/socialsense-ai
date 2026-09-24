@@ -916,9 +916,21 @@ class AnalysisService:
                     db.session.rollback()
                     current_app.logger.warning(f'Context intelligence lookup failed: {e}')
 
+        # Batch-load comment contexts for template (no per-row lazy load)
+        comment_contexts = {}
+        if comments:
+            try:
+                cc_rows = CommentContext.query.filter(
+                    CommentContext.comment_result_id.in_([c.id for c in comments])
+                ).all()
+                comment_contexts = {r.comment_result_id: r for r in cc_rows}
+            except Exception:
+                comment_contexts = {}
+
         result = {
             'analysis': analysis,
             'comments': comments,
+            'comment_contexts': comment_contexts,
             'high_risk': high_risk,
             'top_spam': top_spam,
             'top_toxic': top_toxic,
@@ -956,65 +968,127 @@ class AnalysisService:
         return self.analysis_repo.get_recent_by_user(user_id, limit)
 
     def get_dashboard_stats(self, user_id, platform='all'):
-        analyses = self.analysis_repo.get_by_user_id(user_id)
-        if platform != 'all':
-            analyses = [a for a in analyses if a.analysis_type == platform]
-        total_analyses = len(analyses)
-        total_comments = 0
-        total_spam = 0
-        total_toxicity = 0
-        total_sentiment = 0
-        total_ai = 0
-        total_risk = 0
-        total_bot = 0
-        analysis_count = 0
-        critical_count = 0
-        transcript_count = 0
+        """Dashboard aggregates with a fixed query budget.
 
-        for analysis in analyses:
-            averages = self.comment_repo.get_average_scores_by_analysis(analysis.id)
-            comment_count = self.comment_repo.count_by_analysis(analysis.id)
-            total_comments += comment_count
-            critical_count += analysis.critical_comments_count or 0
-            if comment_count > 0:
-                total_spam += averages['avg_spam']
-                total_toxicity += averages['avg_toxicity']
-                total_sentiment += averages['avg_sentiment']
-                total_ai += averages['avg_ai_like']
-                total_risk += averages['avg_risk']
-                total_bot += averages.get('avg_bot', 0)
+        Per-analysis statistics are computed with GROUP BY aggregates
+        (TrendService pattern) instead of one query per analysis, so the
+        query count scales with dashboard sections, not history size.
+        Output shape and rounding match the legacy computation exactly:
+        comment averages are means-of-per-analysis-means, unavailable
+        values are ignored rather than zero-filled.
+        """
+        from sqlalchemy import func, case
+        from models.entity import Entity as _Entity
+        from models.entity_context import EntityContext as _EntityContext
+        from models.media_analysis import MediaAnalysis as _MediaAnalysis
+        from models.video_transcript import VideoTranscript as _VideoTranscript
+        from models.analysis import YouTubeAnalysis as _YouTubeAnalysis
+        from models.video_context_history import VideoContextHistory as _VideoHistory
+
+        base = Analysis.query.filter_by(user_id=user_id)
+        if platform != 'all':
+            base = base.filter(Analysis.analysis_type == platform)
+        id_rows = base.with_entities(
+            Analysis.id, Analysis.critical_comments_count
+        ).order_by(Analysis.created_at.desc()).all()
+        aids = [row.id for row in id_rows]
+        total_analyses = len(aids)
+        critical_count = sum(row.critical_comments_count or 0 for row in id_rows)
+
+        comment_means = {}
+        if aids:
+            for row in db.session.query(
+                CommentResult.analysis_id,
+                func.avg(CommentResult.spam_score),
+                func.avg(CommentResult.toxicity_score),
+                func.avg(CommentResult.sentiment_score),
+                func.avg(CommentResult.ai_like_score),
+                func.avg(CommentResult.bot_score),
+                func.avg(CommentResult.risk_score),
+                func.count(CommentResult.id),
+            ).filter(CommentResult.analysis_id.in_(aids)).group_by(
+                CommentResult.analysis_id,
+            ).all():
+                comment_means[row[0]] = {
+                    'avg_spam': round(row[1] or 0, 1),
+                    'avg_toxicity': round(row[2] or 0, 1),
+                    'avg_sentiment': round(row[3] or 0, 1),
+                    'avg_ai_like': round(row[4] or 0, 1),
+                    'avg_bot': round(row[5] or 0, 1),
+                    'avg_risk': round(row[6] or 0, 1),
+                    'count': row[7],
+                }
+
+        total_comments = 0
+        total_spam = 0.0
+        total_toxicity = 0.0
+        total_sentiment = 0.0
+        total_ai = 0.0
+        total_risk = 0.0
+        total_bot = 0.0
+        analysis_count = 0
+        for aid in aids:
+            means = comment_means.get(aid)
+            count = means['count'] if means else 0
+            total_comments += count
+            if count > 0:
+                total_spam += means['avg_spam']
+                total_toxicity += means['avg_toxicity']
+                total_sentiment += means['avg_sentiment']
+                total_ai += means['avg_ai_like']
+                total_risk += means['avg_risk']
+                total_bot += means['avg_bot']
                 analysis_count += 1
-            yt = analysis.youtube_analysis
-            if yt and yt.transcript:
-                transcript_count += 1
+
+        transcript_count = 0
+        if aids:
+            transcript_count = db.session.query(
+                func.count(func.distinct(Analysis.id))
+            ).join(_YouTubeAnalysis,
+                   _YouTubeAnalysis.analysis_id == Analysis.id
+                   ).join(_VideoTranscript,
+                          _VideoTranscript.youtube_analysis_id == _YouTubeAnalysis.id
+                          ).filter(Analysis.id.in_(aids)).scalar() or 0
 
         entity_count = 0
+        entity_type_counts = {'PERSON': 0, 'COMPANY': 0, 'PRODUCT': 0, 'LOCATION': 0, 'OTHER': 0}
+        if aids:
+            for entity_type, frequency, count in db.session.query(
+                _Entity.entity_type,
+                func.sum(_Entity.frequency),
+                func.count(_Entity.id),
+            ).filter(_Entity.analysis_id.in_(aids)).group_by(
+                _Entity.entity_type,
+            ).all():
+                et = entity_type if entity_type in entity_type_counts else 'OTHER'
+                entity_type_counts[et] = entity_type_counts.get(et, 0) + (frequency or 0)
+                entity_count += count or 0
+
         entity_risk_total = 0.0
         entity_risk_count = 0
-        entity_type_counts = {'PERSON': 0, 'COMPANY': 0, 'PRODUCT': 0, 'LOCATION': 0, 'OTHER': 0}
         entity_risk_low = 0
         entity_risk_medium = 0
         entity_risk_high = 0
         entity_risk_critical = 0
-        for analysis in analyses:
-            ents = Entity.query.filter_by(analysis_id=analysis.id).all()
-            entity_count += len(ents)
-            for e in ents:
-                et = e.entity_type if e.entity_type in entity_type_counts else 'OTHER'
-                entity_type_counts[et] = entity_type_counts.get(et, 0) + e.frequency
-            ecs = EntityContext.query.join(Entity).filter(Entity.analysis_id == analysis.id).all()
-            for ec in ecs:
-                rs = ec.entity_risk_score or 0.0
-                entity_risk_total += rs
-                entity_risk_count += 1
-                if rs > 75:
-                    entity_risk_critical += 1
-                elif rs > 50:
-                    entity_risk_high += 1
-                elif rs > 25:
-                    entity_risk_medium += 1
-                else:
-                    entity_risk_low += 1
+        if aids:
+            risk_row = db.session.query(
+                func.count(_EntityContext.id),
+                func.avg(func.coalesce(_EntityContext.entity_risk_score, 0.0)),
+                func.sum(case((func.coalesce(_EntityContext.entity_risk_score, 0.0) > 75, 1), else_=0)),
+                func.sum(case((func.coalesce(_EntityContext.entity_risk_score, 0.0) > 50, 1), else_=0)),
+                func.sum(case((func.coalesce(_EntityContext.entity_risk_score, 0.0) > 25, 1), else_=0)),
+            ).join(_Entity,
+                   _EntityContext.entity_id == _Entity.id
+                   ).filter(_Entity.analysis_id.in_(aids)).first()
+            if risk_row is not None:
+                # Buckets mirror the legacy if/elif chain: >75 critical,
+                # else >50 high, else >25 medium, else low.
+                entity_risk_count = risk_row[0] or 0
+                entity_risk_total = (risk_row[1] or 0.0) * entity_risk_count
+                entity_risk_critical = risk_row[2] or 0
+                entity_risk_high = (risk_row[3] or 0) - entity_risk_critical
+                entity_risk_medium = (risk_row[4] or 0) - (risk_row[3] or 0)
+                entity_risk_low = entity_risk_count - (risk_row[4] or 0)
 
         community_health = 'Low'
         avg_all_risk = total_risk / max(analysis_count, 1)
@@ -1031,18 +1105,25 @@ class AnalysisService:
         voice_clone_count = 0
         authenticity_total = 0.0
         authenticity_count = 0
-        for analysis in analyses:
-            ma = analysis.media_analysis
-            if ma:
-                authenticity_total += ma.overall_authenticity_score or 0.0
+        if aids:
+            media_rows = db.session.query(
+                _MediaAnalysis.overall_authenticity_score,
+                _MediaAnalysis.overall_ai_probability,
+                _MediaAnalysis.deepfake_score,
+                _MediaAnalysis.synthetic_voice_score,
+            ).join(Analysis,
+                   _MediaAnalysis.analysis_id == Analysis.id
+                   ).filter(Analysis.id.in_(aids)).all()
+            for row in media_rows:
+                authenticity_total += row[0] or 0.0
                 authenticity_count += 1
-                if (ma.overall_ai_probability or 0.0) >= 60.0:
+                if (row[1] or 0.0) >= 60.0:
                     ai_videos += 1
-                elif (ma.overall_authenticity_score or 0.0) >= 60.0:
+                elif (row[0] or 0.0) >= 60.0:
                     authentic_videos += 1
-                if (ma.deepfake_score or 0.0) >= 60.0:
+                if (row[2] or 0.0) >= 60.0:
                     deepfake_count += 1
-                if (ma.synthetic_voice_score or 0.0) >= 60.0:
+                if (row[3] or 0.0) >= 60.0:
                     voice_clone_count += 1
 
         return {
@@ -1064,7 +1145,7 @@ class AnalysisService:
             'entity_risk_medium': entity_risk_medium,
             'entity_risk_high': entity_risk_high,
             'entity_risk_critical': entity_risk_critical,
-            'total_videos_analyzed': VideoContextHistory.query.filter_by(user_id=user_id).count(),
+            'total_videos_analyzed': _VideoHistory.query.filter_by(user_id=user_id).count(),
             'ai_videos': ai_videos,
             'authentic_videos': authentic_videos,
             'deepfake_count': deepfake_count,
@@ -1074,16 +1155,72 @@ class AnalysisService:
             'entity_risk_count': entity_risk_count,
         }
 
-    def get_all_user_analyses_with_data(self, user_id, limit=None):
-        analyses = self.analysis_repo.get_by_user_id(user_id)
-        if limit:
-            analyses = analyses[:limit]
+    def get_all_user_analyses_with_data(self, user_id, limit=None, offset=None):
+        """Bounded per-analysis summaries for history/dashboard lists.
+
+        The row cap is applied in SQL (never load-all-then-slice) and all
+        per-analysis statistics come from GROUP BY / IN-batched queries,
+        so cost scales with the page size rather than history length.
+        Output shape matches the legacy computation exactly.
+        """
+        from sqlalchemy import func
+        from models.video_transcript import VideoTranscript as _VideoTranscript
+
+        analyses = self.analysis_repo.get_by_user_id(user_id, limit=limit, offset=offset)
+        aids = [a.id for a in analyses]
+        if not aids:
+            return []
+
+        means = {}
+        for row in db.session.query(
+            CommentResult.analysis_id,
+            func.avg(CommentResult.spam_score),
+            func.avg(CommentResult.toxicity_score),
+            func.avg(CommentResult.sentiment_score),
+            func.avg(CommentResult.ai_like_score),
+            func.avg(CommentResult.bot_score),
+            func.avg(CommentResult.risk_score),
+            func.count(CommentResult.id),
+        ).filter(CommentResult.analysis_id.in_(aids)).group_by(
+            CommentResult.analysis_id,
+        ).all():
+            means[row[0]] = {
+                'avg_spam': round(row[1] or 0, 1),
+                'avg_toxicity': round(row[2] or 0, 1),
+                'avg_sentiment': round(row[3] or 0, 1),
+                'avg_ai_like': round(row[4] or 0, 1),
+                'avg_bot': round(row[5] or 0, 1),
+                'avg_risk': round(row[6] or 0, 1),
+                'count': row[7],
+            }
+        entity_counts = dict(db.session.query(
+            Entity.analysis_id, func.count(Entity.id),
+        ).filter(Entity.analysis_id.in_(aids)).group_by(
+            Entity.analysis_id,
+        ).all())
+        yt_rows = {yt.analysis_id: yt for yt in YouTubeAnalysis.query.filter(
+            YouTubeAnalysis.analysis_id.in_(aids)).all()}
+        reddit_rows = {r.analysis_id: r for r in RedditAnalysis.query.filter(
+            RedditAnalysis.analysis_id.in_(aids)).all()}
+        yt_ids = [yt.id for yt in yt_rows.values()]
+        transcribed_yt = set()
+        if yt_ids:
+            transcribed_yt = {
+                row[0] for row in db.session.query(
+                    _VideoTranscript.youtube_analysis_id,
+                ).filter(_VideoTranscript.youtube_analysis_id.in_(yt_ids)
+                         ).group_by(_VideoTranscript.youtube_analysis_id).all()
+            }
+
         results = []
         for a in analyses:
-            averages = self.comment_repo.get_average_scores_by_analysis(a.id)
-            comment_count = self.comment_repo.count_by_analysis(a.id)
-            yt = a.youtube_analysis
-            reddit = a.reddit_analysis
+            averages = means.get(a.id, {
+                'avg_spam': 0.0, 'avg_toxicity': 0.0, 'avg_sentiment': 0.0,
+                'avg_ai_like': 0.0, 'avg_bot': 0.0, 'avg_risk': 0.0,
+                'count': 0})
+            comment_count = averages['count']
+            yt = yt_rows.get(a.id)
+            reddit = reddit_rows.get(a.id)
             if a.analysis_type == 'reddit' and reddit:
                 title = reddit.post_title or 'N/A'
                 identifier = reddit.post_id
@@ -1099,8 +1236,9 @@ class AnalysisService:
                 identifier = 'N/A'
                 is_demo = False
                 platform = 'unknown'
-            has_transcript = bool(yt and yt.transcript) if platform == 'youtube' else False
-            entity_count = Entity.query.filter_by(analysis_id=a.id).count()
+            has_transcript = bool(yt and yt.id in transcribed_yt) \
+                if platform == 'youtube' else False
+            entity_count = entity_counts.get(a.id, 0)
             results.append({
                 'id': a.id,
                 'title': title,
@@ -1114,6 +1252,138 @@ class AnalysisService:
                 'created_at': a.created_at,
             })
         return results
+
+    def delete_user_analysis(self, analysis_id, user_id):
+        """Self-service deletion of one user-owned analysis and its subtree.
+
+        Ownership is verified first via the repository (an unknown id or
+        another user's analysis yields not_found without revealing anything).
+        Analyses with a RUNNING or PENDING job are refused so no job is
+        left pointing at deleted data. Dependent rows are removed
+        leaf-first inside a single transaction; generated export files are
+        removed afterwards, scoped strictly inside UPLOAD_FOLDER, with
+        missing files tolerated idempotently.
+        """
+        from models.media_analysis import MediaAnalysis
+        from models.propagation_event import PropagationEvent
+        from models.threat_assessment import ThreatAssessment
+        from models.narrative_occurrence import NarrativeOccurrence
+        from models.coordination_signal import CoordinationSignal
+        from models.report_export import ReportExport
+        from models.job import Job
+        from models.job_log import JobLog
+        from models.transcript_segment import TranscriptSegment
+
+        analysis = self.analysis_repo.get_user_analysis_with_reddit(
+            analysis_id, user_id)
+        if not analysis:
+            return {'success': False, 'not_found': True,
+                    'error': 'Analysis not found.'}
+
+        active = Job.query.filter(
+            Job.result_analysis_id == analysis.id,
+            Job.user_id == user_id,
+            Job.status.in_([Job.PENDING, Job.RUNNING])).first()
+        if active is not None:
+            return {'success': False, 'blocked': True,
+                    'error': 'Analysis cannot be deleted while a related job '
+                             'is still running or pending. Cancel the job first.'}
+
+        export_paths = [
+            row.file_path for row in ReportExport.query.filter_by(
+                analysis_id=analysis.id).all()
+            if getattr(row, 'file_path', None)]
+
+        try:
+            aid = analysis.id
+            yt_ids = [r.id for r in YouTubeAnalysis.query.filter_by(
+                analysis_id=aid).all()]
+            tr_ids = [t.id for t in VideoTranscript.query.filter(
+                VideoTranscript.youtube_analysis_id.in_(yt_ids)).all()] \
+                if yt_ids else []
+            seg_ids = [s.id for s in TranscriptSegment.query.filter(
+                TranscriptSegment.transcript_id.in_(tr_ids)).all()] \
+                if tr_ids else []
+            cr_ids = [c.id for c in CommentResult.query.filter_by(
+                analysis_id=aid).all()]
+            ent_ids = [e.id for e in Entity.query.filter_by(
+                analysis_id=aid).all()]
+
+            def _del(model, criterion):
+                return model.query.filter(criterion).delete(
+                    synchronize_session=False)
+
+            if cr_ids:
+                _del(CommentContext, CommentContext.comment_result_id.in_(cr_ids))
+            if tr_ids:
+                _del(CommentContext, CommentContext.transcript_id.in_(tr_ids))
+            if seg_ids:
+                _del(CommentContext, CommentContext.best_segment_id.in_(seg_ids))
+            if ent_ids:
+                _del(EntityContext, EntityContext.entity_id.in_(ent_ids))
+                _del(EntityMention, EntityMention.entity_id.in_(ent_ids))
+            if cr_ids:
+                _del(EntityContext, EntityContext.comment_result_id.in_(cr_ids))
+                _del(EntityMention, EntityMention.comment_result_id.in_(cr_ids))
+            if seg_ids:
+                _del(TranscriptSegment,
+                     TranscriptSegment.transcript_id.in_(tr_ids))
+            if tr_ids:
+                _del(VideoTranscript,
+                     VideoTranscript.youtube_analysis_id.in_(yt_ids))
+            _del(PropagationEvent,
+                 (PropagationEvent.source_analysis_id == aid) |
+                 (PropagationEvent.target_analysis_id == aid))
+            for model in (ThreatAssessment, NarrativeOccurrence,
+                          CoordinationSignal, MediaAnalysis, ReportExport):
+                _del(model, model.analysis_id == aid)
+            _del(VideoContextHistory, VideoContextHistory.analysis_id == aid)
+            _del(EntityHistory, EntityHistory.analysis_id == aid)
+            if ent_ids:
+                _del(Entity, Entity.analysis_id == aid)
+            if cr_ids:
+                _del(CommentResult, CommentResult.analysis_id == aid)
+            _del(YouTubeAnalysis, YouTubeAnalysis.analysis_id == aid)
+            _del(RedditAnalysis, RedditAnalysis.analysis_id == aid)
+            for job in Job.query.filter_by(
+                    result_analysis_id=aid, user_id=user_id).all():
+                _del(JobLog, JobLog.job_id == job.id)
+                _del(Job, Job.id == job.id)
+            db.session.delete(analysis)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.warning(f'Analysis deletion failed: {exc}')
+            return {'success': False,
+                    'error': 'Analysis could not be deleted.'}
+
+        self._remove_export_files(export_paths)
+        return {'success': True}
+
+    @staticmethod
+    def _remove_export_files(paths):
+        """Delete generated files strictly inside UPLOAD_FOLDER.
+
+        Missing files are tolerated (idempotent); paths escaping the
+        upload folder are never touched.
+        """
+        import os
+        try:
+            base = os.path.realpath(
+                current_app.config.get('UPLOAD_FOLDER', 'reports'))
+        except Exception:
+            return
+        for path in paths or []:
+            try:
+                if not path or not isinstance(path, str):
+                    continue
+                real = os.path.realpath(path)
+                if os.path.commonpath([real, base]) != base:
+                    continue
+                if os.path.isfile(real):
+                    os.remove(real)
+            except Exception:
+                continue
 
     def _generate_transcript_summary(self, transcript_text):
         if not transcript_text:

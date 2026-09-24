@@ -19,7 +19,7 @@ htmlcov/
 
 .DS_Store
 
-reports/
+/reports/
 logs/
 *.log
 postgres_data/

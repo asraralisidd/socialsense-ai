@@ -6,24 +6,32 @@ trend_bp = Blueprint('trends', __name__, url_prefix='/trends')
 trend_service = TrendService()
 
 
+def _clamped_days(raw):
+    try:
+        days = int(raw)
+    except (TypeError, ValueError):
+        return 30
+    if days <= 0:
+        return 30
+    if days not in (1, 7, 30):
+        return 30
+    return days
+
+
 @trend_bp.route('')
 @trend_bp.route('/')
 @login_required
 def index():
-    days = request.args.get('days', 30, type=int)
+    days = _clamped_days(request.args.get('days', 30, type=int))
     platform = request.args.get('platform', 'all')
-    if days not in (1, 7, 30, 0):
-        days = 30
-    data = trend_service.get_trends(current_user.id, days=days if days > 0 else 365*10, platform=platform)
+    data = trend_service.get_trends(current_user.id, days=days, platform=platform)
     return render_template('trends/index.html', data=data, days=days, platform=platform)
 
 
 @trend_bp.route('/data')
 @login_required
 def trend_data():
-    days = request.args.get('days', 30, type=int)
+    days = _clamped_days(request.args.get('days', 30, type=int))
     platform = request.args.get('platform', 'all')
-    if days not in (1, 7, 30, 0):
-        days = 30
-    data = trend_service.get_trends(current_user.id, days=days if days > 0 else 365*10, platform=platform)
+    data = trend_service.get_trends(current_user.id, days=days, platform=platform)
     return jsonify(data)

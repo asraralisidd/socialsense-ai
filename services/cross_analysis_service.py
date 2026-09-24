@@ -126,32 +126,43 @@ class CrossAnalysisService:
     # ------------------------------------------------------- cross-analysis
 
     def compare_with_history(self, user_id, current_analysis_id,
-                             window_days=None, max_analyses=None):
-        """Compare the current analysis against bounded user history."""
+                             window_days=None, max_analyses=None, prefetch=None):
+        """Compare the current analysis against bounded user history.
+
+        ``prefetch`` reuse is request-local (no cross-request or cross-user
+        cache); when provided the already-loaded window/series is reused
+        with zero extra queries.
+        """
         if not self._cfg(self.ENABLE_KEY, True):
             return self._unavailable('V13 historical intelligence is disabled.')
         if user_id is None or current_analysis_id is None:
             return self._unavailable('User and current analysis are required.')
 
-        window = self._int_or(window_days, self._window_days(), 1, 3650)
-        limit = self._int_or(max_analyses, self._max_analyses(), 1, 500)
-        minimum = self._min_sample()
-        if window is None or limit is None:
-            return self._unavailable('Invalid comparison bounds provided.')
+        if prefetch is not None:
+            window = prefetch['window']
+            minimum = prefetch['minimum']
+            past_ids = prefetch['past_ids']
+            series = prefetch['series']
+        else:
+            window = self._int_or(window_days, self._window_days(), 1, 3650)
+            limit = self._int_or(max_analyses, self._max_analyses(), 1, 500)
+            minimum = self._min_sample()
+            if window is None or limit is None:
+                return self._unavailable('Invalid comparison bounds provided.')
 
-        try:
-            since = _now() - timedelta(days=window)
-            past = self.temporal_repo.get_user_analyses_in_window(
-                user_id, since=since,
-                exclude_analysis_id=current_analysis_id, limit=limit)
-            past_ids = sorted({a.id for a in past
-                               if getattr(a, 'id', None) is not None})
-            series = self.baseline_service.get_metric_series(
-                user_id, past_ids, current_analysis_id)
-        except Exception as exc:
-            db.session.rollback()
-            logger.warning(f'V13 cross-analysis query failed: {exc}')
-            return self._unavailable('Cross-analysis queries failed; rolled back.')
+            try:
+                since = _now() - timedelta(days=window)
+                past = self.temporal_repo.get_user_analyses_in_window(
+                    user_id, since=since,
+                    exclude_analysis_id=current_analysis_id, limit=limit)
+                past_ids = sorted({a.id for a in past
+                                   if getattr(a, 'id', None) is not None})
+                series = self.baseline_service.get_metric_series(
+                    user_id, past_ids, current_analysis_id)
+            except Exception as exc:
+                db.session.rollback()
+                logger.warning(f'V13 cross-analysis query failed: {exc}')
+                return self._unavailable('Cross-analysis queries failed; rolled back.')
 
         metrics = {}
         for name in HistoricalContextService.METRICS:

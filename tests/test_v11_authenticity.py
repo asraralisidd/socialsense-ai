@@ -614,5 +614,5 @@ class TestMigration:
             directory = ScriptDirectory(os.path.join(app.root_path, 'migrations'))
             heads = directory.get_heads()
             assert len(heads) == 1
-            # V13 extends the chain: v9_001 -> v11_001 -> v12_001 -> v13_001.
-            assert heads[0] == 'v13_001'
+            # V14 extends the chain: v9_001 -> v11_001 -> v12_001 -> v13_001 -> v14_001.
+            assert heads[0] == 'v14_001'

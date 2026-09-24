@@ -42,11 +42,15 @@ def create():
 @login_required
 def list_jobs():
     page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
     status = request.args.get('status', None)
     limit = 20
     offset = (page - 1) * limit
     jobs = job_service.get_jobs_for_user(current_user.id, limit=limit, offset=offset, status=status)
-    return render_template('jobs/history.html', jobs=jobs, current_status=status, page=page)
+    total = job_service.job_repo.count_jobs_for_user(current_user.id, status=status)
+    total_pages = (total + limit - 1) // limit if total else 1
+    return render_template('jobs/history.html', jobs=jobs, current_status=status, page=page, total_pages=total_pages, total=total)
 
 
 @job_bp.route('/<int:job_id>')
@@ -97,7 +101,14 @@ def retry(job_id):
 @job_bp.route('/<int:job_id>/logs')
 @login_required
 def logs(job_id):
-    logs = job_service.get_job_logs(job_id, current_user.id)
+    page = request.args.get('page', 1, type=int)
+    if not page or page < 1:
+        page = 1
+    limit = request.args.get('limit', 50, type=int)
+    if not limit or limit < 1 or limit > 100:
+        limit = 50
+    offset = (page - 1) * limit
+    logs = job_service.get_job_logs(job_id, current_user.id, limit=limit, offset=offset)
     if logs is None:
         return jsonify({'error': 'Job not found.'}), 404
     data = [{

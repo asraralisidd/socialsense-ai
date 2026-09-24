@@ -1,36 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Profile - SocialSense AI{% endblock %}
+{% block title %}Profile & Account - SocialSense AI{% endblock %}
+
+{% block page_header %}
+<div class="ss-page-header">
+    <h1 class="ss-page-header__title">Profile & Account</h1>
+    <p class="ss-page-header__subtitle">Manage your account settings, security, and data.</p>
+</div>
+<nav aria-label="Breadcrumb" class="ss-breadcrumb mb-4">
+    <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Profile</li>
+    </ol>
+</nav>
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center py-4">
-    <div class="col-md-8">
-        <div class="card border-secondary mb-4">
-            <div class="card-body p-4">
-                <div class="text-center mb-4">
-                    <div class="display-1 text-primary mb-2">
-                        <i class="fas fa-user-circle"></i>
-                    </div>
-                    <h3 class="fw-bold">{{ data.username }}</h3>
-                    <p class="text-muted">{{ data.email }}</p>
+<div class="row g-4">
+    <div class="col-12 col-lg-4">
+        <div class="ss-card">
+            <div class="card-body p-4 text-center">
+                <div class="ss-brand-icon mx-auto mb-3" style="width: 64px; height: 64px; font-size: 1.5rem;">
+                    <i class="fas fa-user"></i>
                 </div>
+                <h3 class="h5 fw-bold mb-1">{{ data.username }}</h3>
+                <p class="text-muted small mb-3">{{ data.email }}</p>
+                <span class="badge bg-secondary">{{ data.username }}</span>
+            </div>
+        </div>
 
-                <div class="row g-3">
-                    <div class="col-sm-6">
-                        <div class="card bg-dark border-secondary">
-                            <div class="card-body text-center">
-                                <h5 class="card-title text-muted">Member Since</h5>
-                                <p class="card-text fs-5">
-                                    {{ data.created_at.strftime('%B %d, %Y') }}
-                                </p>
-                            </div>
+        <div class="ss-card mt-3">
+            <div class="card-body p-3">
+                <div class="row g-3 text-center">
+                    <div class="col-6">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Member Since</div>
+                            <div class="fw-bold small">{{ data.created_at.strftime('%B %d, %Y') }}</div>
                         </div>
                     </div>
-                    <div class="col-sm-6">
-                        <div class="card bg-dark border-secondary">
-                            <div class="card-body text-center">
-                                <h5 class="card-title text-muted">Total Analyses</h5>
-                                <p class="card-text fs-5">{{ data.analysis_count }}</p>
-                            </div>
+                    <div class="col-6">
+                        <div class="p-2 rounded" style="background: var(--ss-surface-raised);">
+                            <div class="small text-muted">Total Analyses</div>
+                            <div class="fw-bold fs-5">{{ data.analysis_count }}</div>
                         </div>
                     </div>
                 </div>
@@ -38,33 +48,117 @@
         </div>
 
         {% if data.recent_analyses %}
-        <div class="card border-secondary">
-            <div class="card-header bg-dark">
-                <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Analyses</h5>
+        <div class="ss-card mt-3">
+            <div class="card-header bg-transparent">
+                <h6 class="mb-0"><i class="fas fa-clock me-2 text-secondary"></i>Recent Analyses</h6>
             </div>
             <div class="card-body p-0">
                 <div class="list-group list-group-flush">
                     {% for a in data.recent_analyses %}
                     <a href="{{ url_for('analysis.result', analysis_id=a.id) }}"
-                       class="list-group-item list-group-item-action bg-dark border-secondary">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                {% if a.youtube_analysis %}
-                                <strong>{{ a.youtube_analysis.video_title }}</strong>
-                                <br>
-                                <small class="text-muted">{{ a.youtube_analysis.video_id }}</small>
-                                {% else %}
-                                <strong>Analysis #{{ a.id }}</strong>
-                                {% endif %}
-                            </div>
-                            <small class="text-muted">{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                       class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" style="background: var(--ss-surface); border-color: var(--ss-border);">
+                        <div>
+                            {% if a.youtube_analysis %}
+                            <div class="small fw-bold">{{ a.youtube_analysis.video_title|truncate(32) }}</div>
+                            <small class="text-muted">{{ a.youtube_analysis.video_id }}</small>
+                            {% else %}
+                            <div class="small fw-bold">Analysis #{{ a.id }}</div>
+                            {% endif %}
                         </div>
+                        <small class="text-muted">{{ a.created_at.strftime('%m/%d') }}</small>
                     </a>
                     {% endfor %}
                 </div>
             </div>
         </div>
         {% endif %}
+    </div>
+
+    <div class="col-12 col-lg-8">
+        <div class="ss-card mb-4">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0"><i class="fas fa-id-card me-2 text-secondary"></i>Account Information</h5>
+                <small class="text-muted">Your basic account details — contact support to change your email.</small>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted mb-1">Username</label>
+                        <div class="form-control" style="background: var(--ss-surface-raised); border-color: var(--ss-border);">{{ data.username }}</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted mb-1">Email address</label>
+                        <div class="form-control" style="background: var(--ss-surface-raised); border-color: var(--ss-border);">{{ data.email }}</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted mb-1">Member since</label>
+                        <div class="form-control" style="background: var(--ss-surface-raised); border-color: var(--ss-border);">{{ data.created_at.strftime('%Y-%m-%d') }}</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted mb-1">Analyses</label>
+                        <div class="form-control" style="background: var(--ss-surface-raised); border-color: var(--ss-border);">{{ data.analysis_count }} total</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ss-card mb-4">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0"><i class="fas fa-key me-2 text-secondary"></i>Change Password</h5>
+                <small class="text-muted">Update your password — you'll be signed out after a successful change.</small>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('auth.password_change') }}" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="current_password" class="form-label">Current password</label>
+                        <input type="password" class="form-control" id="current_password" name="current_password" required autocomplete="current-password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="new_password" class="form-label">New password</label>
+                        <input type="password" class="form-control" id="new_password" name="new_password" required autocomplete="new-password" minlength="8">
+                        <div class="form-text">Minimum 8 characters with uppercase, lowercase, and a number.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Confirm new password</label>
+                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required autocomplete="new-password" minlength="8">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Change Password</button>
+                        <a href="{{ url_for('auth.profile') }}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="ss-card" style="border: 1px solid var(--ss-danger);">
+            <div class="card-header" style="background: rgba(229,72,77,0.08); border-bottom-color: var(--ss-danger);">
+                <h5 class="mb-0 text-danger"><i class="fas fa-triangle-exclamation me-2"></i>Danger Zone</h5>
+                <small class="text-muted">Permanently delete your account and all associated data. This cannot be undone.</small>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-danger d-flex align-items-start mb-3" role="alert" style="background: rgba(229,72,77,0.08); border-color: rgba(229,72,77,0.25);">
+                    <i class="fas fa-triangle-exclamation me-2 mt-1"></i>
+                    <div class="small">
+                        <strong>This will delete everything</strong> — analyses, jobs, reports, notifications, and history. Your login will no longer work and reset links will be invalid.
+                    </div>
+                </div>
+                <form method="post" action="{{ url_for('auth.account_delete') }}"
+                      onsubmit="return confirm('Permanently delete your account and ALL associated data? This cannot be undone.')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="del_current_password" class="form-label">Current password <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="del_current_password" name="current_password" required autocomplete="current-password" aria-describedby="delPasswordHelp">
+                        <div id="delPasswordHelp" class="form-text">Required to confirm deletion.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="username_confirm" class="form-label">Type your username <strong>{{ data.username }}</strong> to confirm <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="username_confirm" name="username_confirm" required autocomplete="off" placeholder="{{ data.username }}">
+                    </div>
+                    <button type="submit" class="btn btn-danger w-100"><i class="fas fa-trash me-1"></i>Delete my account permanently</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

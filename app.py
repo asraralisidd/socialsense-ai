@@ -48,6 +48,9 @@ def create_app(config_name=None):
         app.config.from_object('config.TestingConfig')
     elif os.environ.get('FLASK_ENV') == 'production':
         app.config.from_object('config.ProductionConfig')
+        if not os.environ.get('SECRET_KEY'):
+            raise RuntimeError(
+                'SECRET_KEY environment variable is required in production.')
     else:
         app.config.from_object('config.DevelopmentConfig')
 
@@ -138,6 +141,10 @@ def create_app(config_name=None):
     @app.route('/')
     def index():
         return render_template('index.html')
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template('errors/403.html'), 403
 
     @app.errorhandler(404)
     def not_found(e):

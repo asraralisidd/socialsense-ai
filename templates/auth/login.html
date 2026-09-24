@@ -1,41 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Login - SocialSense AI{% endblock %}
+{% block title %}Sign In - SocialSense AI{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center py-5">
-    <div class="col-md-5">
-        <div class="card border-secondary">
-            <div class="card-body p-4">
+<div class="row justify-content-center py-4 py-md-5">
+    <div class="col-12 col-sm-10 col-md-7 col-lg-5 col-xl-4">
+        <div class="ss-card ss-card--elevated">
+            <div class="card-body p-4 p-md-4">
                 <div class="text-center mb-4">
-                    <i class="fas fa-brain fa-3x text-primary mb-2"></i>
-                    <h3 class="fw-bold">Welcome Back</h3>
-                    <p class="text-muted">Sign in to your SocialSense AI account</p>
+                    <div class="ss-brand-icon mx-auto mb-3" style="width: 48px; height: 48px; font-size: 1.25rem;">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h1 class="h4 fw-bold mb-1">Sign In</h1>
+                    <p class="text-muted small mb-0">Welcome back to SocialSense AI</p>
                 </div>
 
-                <form method="POST" action="{{ url_for('auth.login') }}">
+                <form method="POST" action="{{ url_for('auth.login') }}" novalidate>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email Address</label>
+                        <label for="email" class="form-label">Email address</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-envelope"></i></span>
                             <input type="email" class="form-control" id="email" name="email"
-                                   placeholder="you@example.com" required autofocus>
+                                   placeholder="you@example.com" required autofocus autocomplete="email">
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <div class="input-group">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="password" class="form-label mb-0">Password</label>
+                            <a href="{{ url_for('auth.password_forgot') }}" class="small text-decoration-none">Forgot password?</a>
+                        </div>
+                        <div class="input-group mt-1">
                             <span class="input-group-text"><i class="fas fa-lock"></i></span>
                             <input type="password" class="form-control" id="password" name="password"
-                                   placeholder="Enter your password" required>
+                                   placeholder="Enter your password" required autocomplete="current-password">
                         </div>
                     </div>
 
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="remember" name="remember">
-                        <label class="form-check-label" for="remember">Remember Me</label>
+                        <label class="form-check-label small" for="remember">Remember me</label>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100 btn-lg">
@@ -43,14 +48,17 @@
                     </button>
                 </form>
 
-                <div class="text-center mt-3">
-                    <p class="mb-0 text-muted">
+                <div class="text-center mt-4">
+                    <p class="small text-muted mb-0">
                         Don't have an account?
-                        <a href="{{ url_for('auth.register') }}" class="text-primary">Register</a>
+                        <a href="{{ url_for('auth.register') }}" class="fw-bold text-decoration-none">Create Account</a>
                     </p>
                 </div>
             </div>
         </div>
+        <p class="text-center small text-muted mt-3">
+            Protected by SocialSense AI authentication
+        </p>
     </div>
 </div>
 {% endblock %}

@@ -10,6 +10,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/design-system.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/components.css') }}" rel="stylesheet">
     <style>
         .badge-notification { position: relative; top: -8px; left: -5px; font-size: 0.65rem; }
         .nav-link .badge { margin-left: 2px; }
@@ -17,99 +19,87 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary sticky-top">
-        <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
-                <i class="fas fa-brain me-2 text-primary"></i>
-                <span class="fw-bold">SocialSense <span class="text-primary">AI</span></span>
+    <a href="#main-content" class="visually-hidden-focusable ss-skip-link">Skip to main content</a>
+    <nav class="navbar navbar-expand-lg ss-navbar sticky-top" aria-label="Primary">
+        <div class="container ss-shell">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}" aria-label="SocialSense AI home">
+                <span class="ss-brand-icon me-2"><i class="fas fa-brain"></i></span>
+                <span class="fw-bold">SocialSense <span class="ss-brand-accent">AI</span></span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
+                {% set _ep = request.endpoint or '' %}
+                {% set _more_active = _ep in ['reports.list_reports','jobs.list_jobs','schedules.list_schedules','activity.timeline'] %}
                 <ul class="navbar-nav me-auto">
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard.index') }}">
+                        <a class="nav-link {% if _ep == 'dashboard.index' %}active{% endif %}" href="{{ url_for('dashboard.index') }}" {% if _ep == 'dashboard.index' %}aria-current="page"{% endif %}>
                             <i class="fas fa-chart-line me-1"></i>Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('analysis.new') }}">
+                        <a class="nav-link {% if _ep == 'analysis.new' %}active{% endif %}" href="{{ url_for('analysis.new') }}" {% if _ep == 'analysis.new' %}aria-current="page"{% endif %}>
                             <i class="fas fa-plus-circle me-1"></i>New Analysis
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('analysis.history') }}">
+                        <a class="nav-link {% if _ep == 'analysis.history' %}active{% endif %}" href="{{ url_for('analysis.history') }}" {% if _ep == 'analysis.history' %}aria-current="page"{% endif %}>
                             <i class="fas fa-history me-1"></i>History
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('jobs.list_jobs') }}">
-                            <i class="fas fa-tasks me-1"></i>Jobs
+                        <a class="nav-link {% if _ep == 'trends.index' %}active{% endif %}" href="{{ url_for('trends.index') }}" {% if _ep == 'trends.index' %}aria-current="page"{% endif %}>
+                            <i class="fas fa-chart-simple me-1"></i>Trends
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('schedules.list_schedules') }}">
-                            <i class="fas fa-calendar-alt me-1"></i>Schedules
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if _more_active %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" {% if _more_active %}aria-current="true"{% endif %}>
+                            More
                         </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('activity.timeline') }}">
-                            <i class="fas fa-stream me-1"></i>Activity
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('trends.index') }}">
-                            <i class="fas fa-chart-line me-1"></i>Trends
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('admin.monitoring') }}">
-                            <i class="fas fa-heartbeat me-1"></i>Monitoring
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('reports.list_reports') }}">
-                            <i class="fas fa-file-alt me-1"></i>Reports
-                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if _ep == 'reports.list_reports' %}active{% endif %}" href="{{ url_for('reports.list_reports') }}" {% if _ep == 'reports.list_reports' %}aria-current="page"{% endif %}><i class="fas fa-file-alt me-2"></i>Reports</a></li>
+                            <li><a class="dropdown-item {% if _ep == 'jobs.list_jobs' %}active{% endif %}" href="{{ url_for('jobs.list_jobs') }}" {% if _ep == 'jobs.list_jobs' %}aria-current="page"{% endif %}><i class="fas fa-tasks me-2"></i>Jobs</a></li>
+                            <li><a class="dropdown-item {% if _ep == 'schedules.list_schedules' %}active{% endif %}" href="{{ url_for('schedules.list_schedules') }}" {% if _ep == 'schedules.list_schedules' %}aria-current="page"{% endif %}><i class="fas fa-calendar-alt me-2"></i>Schedules</a></li>
+                            <li><a class="dropdown-item {% if _ep == 'activity.timeline' %}active{% endif %}" href="{{ url_for('activity.timeline') }}" {% if _ep == 'activity.timeline' %}aria-current="page"{% endif %}><i class="fas fa-stream me-2"></i>Activity</a></li>
+                        </ul>
                     </li>
                     {% endif %}
                 </ul>
-                <ul class="navbar-nav">
+                <ul class="navbar-nav align-items-lg-center">
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link position-relative" href="{{ url_for('notifications.list_notifications') }}">
-                            <i class="fas fa-bell me-1"></i>Notifications
+                        <a class="nav-link ss-icon-btn position-relative {% if _ep == 'notifications.list_notifications' %}active{% endif %}" href="{{ url_for('notifications.list_notifications') }}" aria-label="Notifications" {% if _ep == 'notifications.list_notifications' %}aria-current="page"{% endif %}>
+                            <i class="fas fa-bell"></i>
                             {% if unread_notifications > 0 %}
                             <span class="badge bg-danger rounded-pill badge-notification">{{ unread_notifications }}</span>
                             {% endif %}
                         </a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User menu">
                             <i class="fas fa-user-circle me-1"></i>{{ current_user.username }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}">
-                                <i class="fas fa-id-card me-2"></i>Profile
-                            </a></li>
+                            <li><a class="dropdown-item {% if _ep == 'auth.profile' %}active{% endif %}" href="{{ url_for('auth.profile') }}"><i class="fas fa-id-card me-2"></i>Profile</a></li>
+                            {% if current_user.is_authenticated and current_user.is_admin %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
-                                <i class="fas fa-sign-out-alt me-2"></i>Logout
-                            </a></li>
+                            <li><h6 class="dropdown-header">Administration</h6></li>
+                            <li><a class="dropdown-item {% if _ep == 'admin.monitoring' %}active{% endif %}" href="{{ url_for('admin.monitoring') }}"><i class="fas fa-heartbeat me-2"></i>Monitoring</a></li>
+                            <li><a class="dropdown-item {% if _ep == 'admin.health' %}active{% endif %}" href="{{ url_for('admin.health') }}"><i class="fas fa-stethoscope me-2"></i>Health</a></li>
+                            <li><a class="dropdown-item {% if _ep == 'admin.maintenance' %}active{% endif %}" href="{{ url_for('admin.maintenance') }}"><i class="fas fa-screwdriver-wrench me-2"></i>Maintenance</a></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
                         </ul>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auth.login') }}">
-                            <i class="fas fa-sign-in-alt me-1"></i>Login
-                        </a>
+                        <a class="nav-link" href="{{ url_for('auth.login') }}">Login</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auth.register') }}">
-                            <i class="fas fa-user-plus me-1"></i>Register
-                        </a>
+                        <a class="nav-link" href="{{ url_for('auth.register') }}">Register</a>
                     </li>
                     {% endif %}
                 </ul>
@@ -122,11 +112,27 @@
         <i class="fas fa-flask me-2"></i>
         <strong>Demo Mode Active</strong> &mdash;
         YouTube API key not configured. Using simulated data for demonstrations.
-        <button type="button" class="btn-close ms-3" onclick="document.getElementById('demoBanner').style.display='none'"></button>
+        <button type="button" class="btn-close ms-3" onclick="document.getElementById('demoBanner').style.display='none'" aria-label="Dismiss demo banner"></button>
     </div>
     {% endif %}
 
-    <div class="container mt-4">
+    <main id="main-content" class="container ss-shell mt-4" tabindex="-1">
+        {% block page_header %}{% endblock %}
+        {% block breadcrumbs %}
+        {% if breadcrumbs is defined and breadcrumbs %}
+        <nav aria-label="Breadcrumb" class="ss-breadcrumb mb-3">
+            <ol class="breadcrumb mb-0">
+                {% for crumb in breadcrumbs %}
+                {% if not loop.last and crumb.url %}
+                <li class="breadcrumb-item"><a href="{{ crumb.url }}">{{ crumb.label }}</a></li>
+                {% else %}
+                <li class="breadcrumb-item active" aria-current="page">{{ crumb.label }}</li>
+                {% endif %}
+                {% endfor %}
+            </ol>
+        </nav>
+        {% endif %}
+        {% endblock %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -139,16 +145,16 @@
         {% endwith %}
 
         {% block content %}{% endblock %}
-    </div>
+    </main>
 
-    <footer class="footer mt-5 py-4 bg-dark border-top border-secondary">
-        <div class="container text-center">
-            <p class="text-muted mb-0">
+    <footer class="footer ss-footer mt-5 py-4">
+        <div class="container ss-shell text-center">
+            <p class="text-muted mb-1">
                 <i class="fas fa-brain me-1"></i> SocialSense AI &mdash;
                 AI-Powered Social Media Content Intelligence
             </p>
             <small class="text-muted">
-                AI detection is probabilistic and should not be treated as proof.
+                AI detection is probabilistic and should not be treated as proof. Historical context is descriptive, not causal.
             </small>
         </div>
     </footer>
