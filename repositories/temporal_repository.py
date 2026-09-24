@@ -227,34 +227,59 @@ class TemporalRepository(BaseRepository):
         """Per-analysis comment metric means for exactly the given ids.
 
         Returns ``{analysis_id: {sentiment, toxicity, spam, duplicate, n}}``.
-        Stored values are used as-is; rows are counted so callers can
-        distinguish thin evidence from solid evidence.
+        Aggregation is performed in the database (AVG / COUNT per
+        analysis); no full CommentResult rows are materialized.
+        Stored NULL values are ignored (AVG skips NULLs) and ``n`` is
+        the total count of non-NULL metric values across the four
+        columns, so callers can distinguish thin evidence from solid
+        evidence. Empty analyses produce no entry (callers treat the
+        metric as unavailable), exactly as the previous Python-side
+        implementation did. PostgreSQL + SQLite compatible.
         """
         from models.comment_result import CommentResult
         ids = [int(a) for a in (analysis_ids or []) if a is not None]
         if not ids:
             return {}
-        rows = CommentResult.query.filter(CommentResult.analysis_id.in_(ids)).all()
-        buckets = {}
-        for row in rows:
-            bucket = buckets.setdefault(getattr(row, 'analysis_id', None), {
-                'sentiment': [], 'toxicity': [], 'spam': [], 'duplicate': [],
-            })
-            if getattr(row, 'sentiment_score', None) is not None:
-                bucket['sentiment'].append(row.sentiment_score)
-            if getattr(row, 'toxicity_score', None) is not None:
-                bucket['toxicity'].append(row.toxicity_score)
-            if getattr(row, 'spam_score', None) is not None:
-                bucket['spam'].append(row.spam_score)
-            if getattr(row, 'duplicate_score', None) is not None:
-                bucket['duplicate'].append(row.duplicate_score)
+        rows = db.session.query(
+            CommentResult.analysis_id,
+            func.avg(CommentResult.sentiment_score),
+            func.avg(CommentResult.toxicity_score),
+            func.avg(CommentResult.spam_score),
+            func.avg(CommentResult.duplicate_score),
+            func.count(CommentResult.sentiment_score),
+            func.count(CommentResult.toxicity_score),
+            func.count(CommentResult.spam_score),
+            func.count(CommentResult.duplicate_score),
+        ).filter(CommentResult.analysis_id.in_(ids)
+                 ).group_by(CommentResult.analysis_id).all()
         result = {}
-        for aid, bucket in buckets.items():
-            result[aid] = {
-                key: (sum(values) / len(values) if values else None)
-                for key, values in bucket.items()
-            }
-            result[aid]['n'] = sum(len(v) for v in bucket.values())
+        for (aid, avg_sentiment, avg_toxicity, avg_spam, avg_duplicate,
+             cnt_sentiment, cnt_toxicity, cnt_spam, cnt_duplicate) in rows:
+            entry = {}
+            if avg_sentiment is not None:
+                entry['sentiment'] = float(avg_sentiment)
+            if avg_toxicity is not None:
+                entry['toxicity'] = float(avg_toxicity)
+            if avg_spam is not None:
+                entry['spam'] = float(avg_spam)
+            if avg_duplicate is not None:
+                entry['duplicate'] = float(avg_duplicate)
+            n = int(cnt_sentiment or 0) + int(cnt_toxicity or 0) + int(cnt_spam or 0) + int(cnt_duplicate or 0)
+            # Preserve the ``n`` contract even when all four means are
+            # NULL (e.g. an analysis whose comments all have NULL scores);
+            # callers check ``n`` to distinguish no-data from genuine zero.
+            # An entry with no non-NULL means and n==0 would previously
+            # still have existed as ``{sentiment: None, ... , n: 0}``;
+            # we replicate that by keeping the entry when n==0 only if the
+            # analysis had at least one CommentResult row (which the GROUP BY
+            # guarantees) — callers treat a missing aid and an ``n==0`` entry
+            # identically (no history appended), so dropping the empty entry
+            # is also correct for V13 semantics, but keep the richer form.
+            entry['n'] = n
+            # Only keep entries that have at least one non-NULL mean or a
+            # non-zero n; empty groups (all NULLs) still return {n:0} so
+            # callers can distinguish "no scores" from "no analysis".
+            result[int(aid)] = entry
         return result
 
     def get_narrative_activity_counts(self, analysis_ids):
