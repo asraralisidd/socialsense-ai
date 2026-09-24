@@ -1,0 +1,134 @@
+/* SocialSense AI — Design System Foundation (V15-A)
+   Centralized tokens for color, typography, spacing, radius, shadow.
+   Additive only; does not rewrite existing component behavior.
+   Keeps Bootstrap 5.3.3 compatibility via CSS custom properties.
+*/
+
+:root {
+  /* Background / Surface */
+  --ss-bg: #0f1115;
+  --ss-surface: #171a21;
+  --ss-surface-raised: #1e232e;
+  --ss-border: #262b36;
+  --ss-border-strong: #2e3444;
+
+  /* Text */
+  --ss-text: #e9ecef;
+  --ss-text-muted: #8a9099;
+  --ss-text-subtle: #6c757d;
+  --ss-text-inverse: #0f1115;
+
+  /* Brand / Semantic */
+  --ss-primary: #4f6ef7;
+  --ss-primary-hover: #3d5be6;
+  --ss-primary-active: #3451d1;
+  --ss-success: #1a9e6a;
+  --ss-warning: #e6a817;
+  --ss-danger: #e5484d;
+  --ss-info: #0ea5e9;
+
+  /* Intelligence */
+  --ss-risk-low: #1a9e6a;
+  --ss-risk-medium: #e6a817;
+  --ss-risk-high: #e5484d;
+  --ss-risk-critical: #a51d2d;
+  --ss-threat: #7c3aed;
+  --ss-authenticity: #06b6d4;
+
+  /* Typography */
+  --ss-font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ss-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale */
+  --ss-text-xs: 0.75rem;   /* 12px */
+  --ss-text-sm: 0.8125rem; /* 13px */
+  --ss-text-base: 0.875rem;/* 14px */
+  --ss-text-md: 0.9375rem; /* 15px */
+  --ss-leading-tight: 1.25;
+  --ss-leading-normal: 1.5;
+  --ss-leading-relaxed: 1.6;
+
+  /* Spacing */
+  --ss-space-1: 4px;
+  --ss-space-2: 8px;
+  --ss-space-3: 12px;
+  --ss-space-4: 16px;
+  --ss-space-5: 24px;
+  --ss-space-6: 32px;
+  --ss-space-7: 48px;
+
+  /* Radius */
+  --ss-radius-sm: 6px;
+  --ss-radius-md: 8px;
+  --ss-radius: 12px;
+  --ss-radius-lg: 16px;
+  --ss-radius-pill: 999px;
+
+  /* Shadow */
+  --ss-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ss-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --ss-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Focus */
+  --ss-focus-ring: 0 0 0 3px rgba(79, 110, 247, 0.4);
+  --ss-focus-ring-strong: 0 0 0 3px rgba(79, 110, 247, 0.6);
+
+  /* Bootstrap overrides (dark SaaS) */
+  --bs-body-bg: var(--ss-bg);
+  --bs-body-color: var(--ss-text);
+  --bs-border-color: var(--ss-border);
+  --bs-primary: var(--ss-primary);
+  --bs-success: var(--ss-success);
+  --bs-warning: var(--ss-warning);
+  --bs-danger: var(--ss-danger);
+  --bs-info: var(--ss-info);
+}
+
+/* Typography foundation */
+html {
+  font-size: 14px;
+}
+
+body {
+  font-family: var(--ss-font-sans);
+  font-size: var(--ss-text-base);
+  line-height: var(--ss-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--ss-bg);
+  color: var(--ss-text);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--ss-font-sans);
+  font-weight: 600;
+  line-height: var(--ss-leading-tight);
+  letter-spacing: -0.01em;
+  color: var(--ss-text);
+  margin-bottom: var(--ss-space-3);
+}
+
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.375rem; }
+h3 { font-size: 1.125rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.9375rem; }
+h6 { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ss-text-muted); }
+
+small, .text-small { font-size: var(--ss-text-sm); }
+.text-muted { color: var(--ss-text-muted) !important; }
+.text-subtle { color: var(--ss-text-subtle) !important; }
+
+.ss-mono, .ss-score {
+  font-family: var(--ss-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Semantic text helpers */
+.ss-text-risk-low { color: var(--ss-risk-low); }
+.ss-text-risk-medium { color: var(--ss-risk-medium); }
+.ss-text-risk-high { color: var(--ss-risk-high); }
+.ss-text-risk-critical { color: var(--ss-risk-critical); }
+.ss-text-threat { color: var(--ss-threat); }
+.ss-text-authenticity { color: var(--ss-authenticity); }
