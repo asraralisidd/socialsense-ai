@@ -1,46 +1,63 @@
 {% extends "base.html" %}
 {% block title %}Analysis History - SocialSense AI{% endblock %}
 
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h3 class="fw-bold"><i class="fas fa-history me-2"></i>Analysis History</h3>
-    <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
-        <i class="fas fa-plus-circle me-1"></i>New Analysis
-    </a>
+{% block page_header %}
+<div class="ss-page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="ss-page-header__title">Analysis History</h1>
+            <p class="ss-page-header__subtitle">Review and manage your previous analyses — view results, export data, or remove analyses.</p>
+        </div>
+        <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
+            <i class="fas fa-plus-circle me-1"></i>New Analysis
+        </a>
+    </div>
 </div>
+<nav aria-label="Breadcrumb" class="ss-breadcrumb mb-3">
+    <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">History</li>
+    </ol>
+</nav>
+{% endblock %}
 
-<div class="card border-secondary">
+{% block content %}
+<div class="ss-card">
+    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="fas fa-history me-2 text-secondary"></i>Analyses <span class="badge bg-secondary ms-2">{{ total if total is defined else analyses|length }}</span></h6>
+        <small class="text-muted">Newest first · risk and platform at a glance</small>
+    </div>
     <div class="card-body p-0">
         {% if analyses %}
         <div class="table-responsive">
             <table class="table table-dark table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Title</th>
-                        <th>Platform</th>
-                        <th>Comments</th>
-                        <th>Avg Risk</th>
-                        <th>Transcript</th>
-                        <th>Entities</th>
-                        <th>Mode</th>
-                        <th>Date</th>
-                        <th>Actions</th>
+                        <th scope="col">#</th>
+                        <th scope="col">Title</th>
+                        <th scope="col">Platform</th>
+                        <th scope="col">Comments</th>
+                        <th scope="col">Avg Risk</th>
+                        <th scope="col">Transcript</th>
+                        <th scope="col">Entities</th>
+                        <th scope="col">Mode</th>
+                        <th scope="col">Date</th>
+                        <th scope="col" class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for a in analyses %}
                     <tr>
-                        <td>{{ a.id }}</td>
-                        <td>{{ a.title|truncate(45) }}</td>
+                        <td class="text-muted small">{{ a.id }}</td>
+                        <td class="small fw-bold" style="max-width: 240px;"><span class="text-truncate d-inline-block" style="max-width: 240px;">{{ a.title|truncate(45) }}</span></td>
                         <td>
                             {% if a.platform == 'reddit' %}
-                            <span class="badge bg-secondary"><i class="fab fa-reddit me-1"></i>Reddit</span>
+                            <span class="badge ss-badge--risk-medium"><i class="fab fa-reddit me-1"></i>Reddit</span>
                             {% else %}
-                            <span class="badge bg-secondary"><i class="fab fa-youtube me-1"></i>YouTube</span>
+                            <span class="badge bg-secondary"><i class="fab fa-youtube me-1 text-danger"></i>YouTube</span>
                             {% endif %}
                         </td>
-                        <td>{{ a.comment_count }}</td>
+                        <td><span class="badge bg-dark border text-light">{{ a.comment_count }}</span></td>
                         <td>
                             {% set level = 'success' if a.avg_risk <= 25 else 'warning' if a.avg_risk <= 50 else 'danger' %}
                             <span class="badge bg-{{ level }}">{{ a.avg_risk }}</span>
@@ -48,34 +65,32 @@
                         <td>
                             {% if a.has_transcript %}
                             <span class="badge bg-info" title="Transcript available"><i class="fas fa-closed-captioning"></i></span>
-                            {% elif a.platform == 'youtube' %}
-                            <span class="text-muted small">—</span>
                             {% else %}
-                            <span class="text-muted small">—</span>
+                            <span class="text-muted small" aria-label="No transcript">—</span>
                             {% endif %}
                         </td>
-                        <td>{{ a.entity_count or 0 }}</td>
+                        <td><span class="ss-mono small">{{ a.entity_count or 0 }}</span></td>
                         <td>
                             {% if a.is_demo %}
                             <span class="badge bg-warning text-dark">Demo</span>
                             {% else %}
-                            <span class="badge bg-info">Live</span>
+                            <span class="badge ss-badge--risk-low">Live</span>
                             {% endif %}
                         </td>
-                        <td><small>{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
+                        <td><small class="text-muted">{{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
                         <td>
-                            <div class="btn-group btn-group-sm">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Analysis actions">
                                 <a href="{{ url_for('analysis.result', analysis_id=a.id) }}"
-                                   class="btn btn-outline-primary" title="View Results">
+                                   class="btn btn-outline-primary" title="View Results" aria-label="View results for analysis {{ a.id }}">
                                     <i class="fas fa-eye"></i>
                                 </a>
                                 <a href="{{ url_for('export.csv_download', analysis_id=a.id) }}"
-                                   class="btn btn-outline-success" title="Download CSV">
+                                   class="btn btn-outline-success" title="Download CSV" aria-label="Download CSV for analysis {{ a.id }}">
                                     <i class="fas fa-file-csv"></i>
                                 </a>
                                 <form method="POST" action="{{ url_for('analysis.delete_analysis', analysis_id=a.id) }}" class="d-inline" onsubmit="return confirm('Delete this analysis and all of its data? This cannot be undone.')">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button class="btn btn-sm btn-outline-danger" title="Delete Analysis">
+                                    <button class="btn btn-sm btn-outline-danger" title="Delete Analysis" aria-label="Delete analysis {{ a.id }}">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </form>
@@ -87,24 +102,26 @@
             </table>
         </div>
         {% else %}
-        <div class="text-center py-5 text-muted">
-            <i class="fas fa-inbox fa-4x mb-3"></i>
-            <h5>No Analysis History</h5>
-            <p>You haven't analyzed any videos or posts yet.</p>
-            <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
-                <i class="fas fa-plus-circle me-1"></i>New Analysis
-            </a>
+        <div class="text-center py-5">
+            <div class="ss-card ss-card--elevated d-inline-block p-4 mb-3" style="max-width: 480px;">
+                <i class="fas fa-inbox fa-2x text-muted mb-3"></i>
+                <h5>No Analysis History</h5>
+                <p class="text-muted small mb-3">You haven't analyzed any videos or posts yet. Run your first analysis to see results here.</p>
+                <a href="{{ url_for('analysis.new') }}" class="btn btn-primary">
+                    <i class="fas fa-plus-circle me-1"></i>New Analysis
+                </a>
+            </div>
         </div>
         {% endif %}
         {% if total_pages is defined and total_pages > 1 %}
-        <nav aria-label="History pagination" class="mt-3">
+        <nav aria-label="History pagination" class="p-3 border-top" style="border-color: var(--ss-border) !important;">
             <ul class="pagination justify-content-center mb-0">
                 <li class="page-item {% if page <= 1 %}disabled{% endif %}">
-                    <a class="page-link" href="{{ url_for('analysis.history', page=page-1) if page > 1 else '#' }}">Previous</a>
+                    <a class="page-link" href="{{ url_for('analysis.history', page=page-1) if page > 1 else '#' }}" aria-label="Previous page">Previous</a>
                 </li>
                 <li class="page-item disabled"><span class="page-link">Page {{ page }} of {{ total_pages }}</span></li>
                 <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
-                    <a class="page-link" href="{{ url_for('analysis.history', page=page+1) if page < total_pages else '#' }}">Next</a>
+                    <a class="page-link" href="{{ url_for('analysis.history', page=page+1) if page < total_pages else '#' }}" aria-label="Next page">Next</a>
                 </li>
             </ul>
         </nav>
